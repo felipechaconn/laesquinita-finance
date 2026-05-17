@@ -466,19 +466,21 @@ function ExpenseForm({
   previous: Expense | null;
   onSubmit: (payload: Record<string, unknown> | Array<Record<string, unknown>>) => Promise<void>;
 }) {
-  const [amount, setAmount] = React.useState(previous?.amount ? String(previous.amount) : "");
+  const [manualAmount, setManualAmount] = React.useState(previous?.amount ? String(previous.amount) : "");
   const [category, setCategory] = React.useState<ExpenseCategory>(
     asExpenseCategory(previous?.category ?? EXPENSE_CATEGORIES[0])
   );
-  const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
   const [productSearch, setProductSearch] = React.useState("");
   const [expenseLines, setExpenseLines] = React.useState<Array<{
     amount: number;
     category: ExpenseCategory;
     productId?: string;
     productName?: string;
+    quantity?: number;
+    unitCost?: number;
     note?: string;
   }>>([]);
+  const [manualMode, setManualMode] = React.useState(false);
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>("SINPE");
   const [selectedDate, setSelectedDate] = React.useState(todayDateInputValue);
   const [receiptNumber, setReceiptNumber] = React.useState("");
@@ -487,8 +489,8 @@ function ExpenseForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const currentLine = buildCurrentExpenseLine();
-    const lines = currentLine ? [...expenseLines, currentLine] : expenseLines;
+    const manualLine = buildManualExpenseLine();
+    const lines = manualLine ? [...expenseLines, manualLine] : expenseLines;
 
     if (!lines.length) return;
 
@@ -501,17 +503,19 @@ function ExpenseForm({
       note: line.note
     })));
 
-    setAmount("");
-    setSelectedProduct(null);
+    setManualAmount("");
     setProductSearch("");
     setExpenseLines([]);
+    setManualMode(false);
     setReceiptNumber("");
     setVendorName("");
     setNote("");
   }
 
-  function buildCurrentExpenseLine() {
-    const parsedAmount = Number(amount);
+  function buildManualExpenseLine() {
+    if (!manualMode) return null;
+
+    const parsedAmount = Number(manualAmount);
 
     if (!parsedAmount || parsedAmount <= 0) {
       return null;
@@ -520,40 +524,77 @@ function ExpenseForm({
     return {
       amount: parsedAmount,
       category,
-      productId: selectedProduct?._id ? String(selectedProduct._id) : undefined,
-      productName: selectedProduct?.name,
       note
     };
   }
 
-  function addCurrentExpenseLine() {
-    const line = buildCurrentExpenseLine();
+  function addManualExpenseLine() {
+    const line = buildManualExpenseLine();
     if (!line) return;
     setExpenseLines((current) => [...current, line]);
-    setAmount("");
-    setSelectedProduct(null);
+    setManualAmount("");
     setProductSearch("");
     setCategory(EXPENSE_CATEGORIES[0]);
     setNote("");
+    setManualMode(false);
   }
 
-  const pendingTotal = expenseLines.reduce((total, line) => total + line.amount, 0) + Number(amount || 0);
+  function addBuyProduct(product: Product) {
+    const id = String(product._id);
+    setExpenseLines((current) => {
+      const found = current.find((line) => line.productId === id);
+
+      if (found) {
+        return current.map((line) =>
+          line.productId === id
+            ? {
+                ...line,
+                quantity: (line.quantity ?? 1) + 1,
+                amount: ((line.quantity ?? 1) + 1) * (line.unitCost ?? line.amount)
+              }
+            : line
+        );
+      }
+
+      const unitCost = product.defaultPrice > 0 ? product.defaultPrice : 0;
+
+      return [
+        ...current,
+        {
+          amount: unitCost,
+          category: asExpenseCategory(product.category),
+          productId: id,
+          productName: product.name,
+          quantity: 1,
+          unitCost
+        }
+      ];
+    });
+    setProductSearch("");
+  }
+
+  function updateExpenseLine(index: number, patch: Partial<{ quantity: number; unitCost: number; amount: number; note: string }>) {
+    setExpenseLines((current) =>
+      current.map((line, itemIndex) => {
+        if (itemIndex !== index) return line;
+        const quantity = Math.max(1, patch.quantity ?? line.quantity ?? 1);
+        const unitCost = Math.max(0, patch.unitCost ?? line.unitCost ?? line.amount);
+        return {
+          ...line,
+          ...patch,
+          quantity,
+          unitCost,
+          amount: patch.amount ?? quantity * unitCost
+        };
+      })
+    );
+  }
+
+  const pendingTotal =
+    expenseLines.reduce((total, line) => total + line.amount, 0) + (manualMode ? Number(manualAmount || 0) : 0);
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <div className="space-y-2">
-        <Label>Monto</Label>
-        <Input
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          placeholder="₡0"
-          className="h-16 text-3xl font-bold"
-          required
-        />
-      </div>
-
       <TransactionDatePicker
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -562,37 +603,55 @@ function ExpenseForm({
       <BuyProductPicker
         products={products}
         search={productSearch}
-        selectedProduct={selectedProduct}
         onSearchChange={setProductSearch}
-        onSelect={(product) => {
-          setSelectedProduct(product);
-          setProductSearch(product.name);
-          setCategory(asExpenseCategory(product.category));
-
-          if (product.defaultPrice > 0) {
-            setAmount(String(product.defaultPrice));
-          }
-        }}
-        onClear={() => {
-          setSelectedProduct(null);
-          setProductSearch("");
-        }}
+        onSelect={addBuyProduct}
       />
 
-      <div className="space-y-2">
-        <Label>Categoria</Label>
-        <select
-          value={category}
-          onChange={(event) => setCategory(event.target.value as ExpenseCategory)}
-          className="h-12 w-full rounded-2xl border bg-background px-4 outline-none focus:ring-2 focus:ring-ring"
-        >
-          {EXPENSE_CATEGORIES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1">
+        <Button type="button" variant={!manualMode ? "default" : "ghost"} onClick={() => setManualMode(false)}>
+          Productos
+        </Button>
+        <Button type="button" variant={manualMode ? "default" : "ghost"} onClick={() => setManualMode(true)}>
+          Gasto manual
+        </Button>
       </div>
+
+      {manualMode ? (
+        <div className="space-y-3 rounded-2xl border bg-muted/30 p-3">
+          <div className="space-y-2">
+            <Label>Monto manual</Label>
+            <Input
+              value={manualAmount}
+              onChange={(event) => setManualAmount(event.target.value)}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="₡0"
+              className="h-14 text-2xl font-bold"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Categoria</Label>
+            <select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as ExpenseCategory)}
+              className="h-12 w-full rounded-2xl border bg-background px-4 outline-none focus:ring-2 focus:ring-ring"
+            >
+              {EXPENSE_CATEGORIES.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota opcional del gasto" />
+          <Button type="button" variant="outline" className="w-full" disabled={!manualAmount} onClick={addManualExpenseLine}>
+            <Plus className="h-4 w-4" />
+            Agregar gasto manual a esta factura
+          </Button>
+        </div>
+      ) : null}
 
       <PaymentPicker value={paymentMethod} onChange={setPaymentMethod} />
 
@@ -608,11 +667,6 @@ function ExpenseForm({
           placeholder="Proveedor opcional"
         />
       </div>
-      <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota opcional" />
-      <Button type="button" variant="outline" className="w-full" disabled={!amount} onClick={addCurrentExpenseLine}>
-        <Plus className="h-4 w-4" />
-        Agregar otro gasto a esta factura
-      </Button>
 
       {expenseLines.length ? (
         <div className="space-y-2 rounded-2xl border bg-muted/30 p-3">
@@ -621,17 +675,30 @@ function ExpenseForm({
             <div key={`${line.category}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-background p-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{line.productName ?? line.category}</p>
-                <p className="text-xs text-muted-foreground">{line.category}</p>
+                <p className="text-xs text-muted-foreground">
+                  {line.category}
+                  {line.productName ? ` · ${line.quantity ?? 1} x ${formatCRC(line.unitCost ?? line.amount)}` : ""}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {line.productName ? (
+                  <>
+                    <QuantityControl
+                      quantity={line.quantity ?? 1}
+                      onMinus={() => updateExpenseLine(index, { quantity: Math.max(1, (line.quantity ?? 1) - 1) })}
+                      onPlus={() => updateExpenseLine(index, { quantity: (line.quantity ?? 1) + 1 })}
+                    />
+                    <Input
+                      value={String(line.unitCost ?? 0)}
+                      onChange={(event) => updateExpenseLine(index, { unitCost: Number(event.target.value || 0) })}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="h-10 w-28 rounded-xl text-sm"
+                    />
+                  </>
+                ) : null}
                 <span className="text-sm font-bold text-red-600">{formatCRC(line.amount)}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2"
-                  onClick={() => setExpenseLines((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                >
+                <Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={() => setExpenseLines((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
                   Quitar
                 </Button>
               </div>
@@ -640,7 +707,7 @@ function ExpenseForm({
         </div>
       ) : null}
 
-      <Button type="submit" size="lg" variant="destructive" className="w-full" disabled={(!amount && !expenseLines.length) || isMutating}>
+      <Button type="submit" size="lg" variant="destructive" className="w-full" disabled={(!manualAmount && !expenseLines.length) || isMutating}>
         {isMutating ? "Guardando..." : `Guardar gastos · ${formatCRC(pendingTotal)}`}
       </Button>
     </form>
@@ -657,17 +724,13 @@ function asExpenseCategory(category: unknown): ExpenseCategory {
 function BuyProductPicker({
   products,
   search,
-  selectedProduct,
   onSearchChange,
-  onSelect,
-  onClear
+  onSelect
 }: {
   products: Product[];
   search: string;
-  selectedProduct: Product | null;
   onSearchChange: (value: string) => void;
   onSelect: (product: Product) => void;
-  onClear: () => void;
 }) {
   const buyProducts = products.filter((product) => {
     const text = `${product.name} ${product.category}`.toLowerCase();
@@ -689,44 +752,30 @@ function BuyProductPicker({
         />
       </div>
 
-      {selectedProduct ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border bg-emerald-500/10 p-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{selectedProduct.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {selectedProduct.category} · Costo ref. {formatCRC(selectedProduct.defaultPrice)}
-            </p>
-          </div>
-          <Button type="button" variant="secondary" size="sm" onClick={onClear}>
-            Cambiar
-          </Button>
-        </div>
-      ) : (
-        <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
-          {buyProducts.length ? (
-            buyProducts.map((product) => (
-              <button
-                key={String(product._id)}
-                type="button"
-                className="flex min-h-14 w-full items-center justify-between rounded-2xl border bg-card p-3 text-left transition hover:bg-secondary"
-                onClick={() => onSelect(product)}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{product.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {product.category} · {formatCRC(product.defaultPrice)}
-                  </span>
+      <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+        {buyProducts.length ? (
+          buyProducts.map((product) => (
+            <button
+              key={String(product._id)}
+              type="button"
+              className="flex min-h-14 w-full items-center justify-between rounded-2xl border bg-card p-3 text-left transition hover:bg-secondary"
+              onClick={() => onSelect(product)}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{product.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {product.category} · {formatCRC(product.defaultPrice)}
                 </span>
-                <PlusCircle className="h-5 w-5 text-primary" />
-              </button>
-            ))
-          ) : (
-            <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
-              Agrega productos en la seccion Productos &gt; Compro.
-            </div>
-          )}
-        </div>
-      )}
+              </span>
+              <PlusCircle className="h-5 w-5 text-primary" />
+            </button>
+          ))
+        ) : (
+          <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+            Agrega productos en la seccion Productos &gt; Compro.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
