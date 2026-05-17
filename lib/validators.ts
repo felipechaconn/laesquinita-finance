@@ -53,7 +53,17 @@ export const orderItemSchema = z.object({
   productName: z.string().trim().min(1).max(80),
   category: z.enum(INCOME_CATEGORIES),
   quantity: z.coerce.number().int().positive().max(999),
-  unitPrice: z.coerce.number().positive().max(10_000_000)
+  unitPrice: z.coerce.number().positive().max(10_000_000),
+  originalUnitPrice: z.coerce.number().positive().max(10_000_000).optional(),
+  priceChangeReason: z.string().trim().max(180).optional().or(z.literal(""))
+}).superRefine((item, context) => {
+  if (item.originalUnitPrice && item.unitPrice !== item.originalUnitPrice && !item.priceChangeReason?.trim()) {
+    context.addIssue({
+      code: "custom",
+      path: ["priceChangeReason"],
+      message: "Detalle del cambio del precio es obligatorio."
+    });
+  }
 });
 
 export const orderSchema = z.object({

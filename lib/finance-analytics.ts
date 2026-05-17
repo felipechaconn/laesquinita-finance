@@ -229,9 +229,15 @@ function buildRecentTransactions(orders: Order[], expenses: Expense[]) {
       id: order._id?.toString() ?? String(order.orderNumber),
       type: "order" as const,
       title: `Orden #${order.orderNumber}`,
-      subtitle: `${order.items.length} productos · ${order.paymentMethod}`,
+      subtitle: `${formatOrderQuantity(order)} · ${order.paymentMethod}`,
       amount: order.totalAmount,
-      createdAt: new Date(order.createdAt).toISOString()
+      createdAt: new Date(order.createdAt).toISOString(),
+      order: {
+        orderNumber: order.orderNumber,
+        items: order.items,
+        paymentMethod: order.paymentMethod,
+        note: order.note
+      }
     })),
     ...expenses.map((expense) => ({
       id: expense._id?.toString() ?? `${expense.category}-${expense.createdAt}`,
@@ -244,6 +250,15 @@ function buildRecentTransactions(orders: Order[], expenses: Expense[]) {
   ]
     .sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)))
     .slice(0, 12);
+}
+
+function formatOrderQuantity(order: Order) {
+  const productCount = order.items.length;
+  const units = order.items.reduce((total, item) => total + item.quantity, 0);
+  const productLabel = productCount === 1 ? "1 producto" : `${productCount} productos`;
+  const unitLabel = units === 1 ? "1 unidad" : `${units} unidades`;
+
+  return `${productLabel}, ${unitLabel}`;
 }
 
 function buildInsights(input: {

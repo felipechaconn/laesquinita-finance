@@ -43,6 +43,7 @@ export function FinanceDashboard() {
     lastEntry,
     reload,
     createOrder,
+    updateOrder,
     createExpense,
     createProduct,
     updateProduct,
@@ -155,7 +156,11 @@ export function FinanceDashboard() {
             />
 
             <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-              <RecentTransactions transactions={summary.recentTransactions} onDelete={deleteTransaction} />
+              <RecentTransactions
+                transactions={summary.recentTransactions}
+                onDelete={deleteTransaction}
+                onUpdateOrder={updateOrder}
+              />
               <DailyNote key={String(summary.dailyNote?.updatedAt ?? "empty-note")} note={summary.dailyNote} onSave={saveDailyNote} />
             </section>
           </>
@@ -169,6 +174,7 @@ export function FinanceDashboard() {
         onCreateOrder={createOrder}
         onCreateExpense={createExpense}
         onCreateProduct={createProduct}
+        onUpdateProduct={updateProduct}
       />
     </main>
   );

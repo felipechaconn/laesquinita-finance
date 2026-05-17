@@ -82,6 +82,32 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     }
   }
 
+  async function updateOrder(id: string, payload: { paymentMethod: string; items: unknown[]; note?: string }) {
+    setIsMutating(true);
+    try {
+      const response = await fetch(`/api/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error((await response.json()).error ?? "No se pudo actualizar la orden.");
+      }
+
+      const order = await response.json();
+      toast.success(`Orden #${order.orderNumber} actualizada`);
+      await load();
+      return order as Order;
+    } catch (mutationError) {
+      const message = mutationError instanceof Error ? mutationError.message : "Error actualizando la orden.";
+      toast.error(message);
+      throw mutationError;
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   async function createExpense(payload: Record<string, unknown>) {
     setIsMutating(true);
     try {
@@ -229,6 +255,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     lastEntry,
     reload: load,
     createOrder,
+    updateOrder,
     createExpense,
     createProduct,
     updateProduct,

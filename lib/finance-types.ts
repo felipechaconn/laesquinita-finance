@@ -47,6 +47,8 @@ export type OrderItem = {
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  originalUnitPrice?: number;
+  priceChangeReason?: string;
 };
 
 export type Order = {
@@ -119,6 +121,12 @@ export type DashboardSummary = {
     subtitle: string;
     amount: number;
     createdAt: string;
+    order?: {
+      orderNumber: number;
+      items: OrderItem[];
+      paymentMethod: PaymentMethod;
+      note?: string;
+    };
   }>;
   insights: string[];
   dailyNote?: DailyNote | null;

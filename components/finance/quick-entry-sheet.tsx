@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { CalendarDays, Copy, Minus, Plus, PlusCircle, Search, ShoppingCart, Wallet } from "lucide-react";
+import { CalendarDays, Copy, Minus, Pencil, Plus, PlusCircle, Search, ShoppingCart, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ type QuickEntrySheetProps = {
   }) => Promise<Order>;
   onCreateExpense: (payload: Record<string, unknown>) => Promise<Expense>;
   onCreateProduct: (payload: Record<string, unknown>) => Promise<Product>;
+  onUpdateProduct: (id: string, payload: Record<string, unknown>) => Promise<Product>;
 };
 
 export function QuickEntrySheet({
@@ -46,7 +47,8 @@ export function QuickEntrySheet({
   lastEntry,
   onCreateOrder,
   onCreateExpense,
-  onCreateProduct
+  onCreateProduct,
+  onUpdateProduct
 }: QuickEntrySheetProps) {
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState<"income" | "expense">("income");
@@ -127,6 +129,7 @@ export function QuickEntrySheet({
             products={products}
             isMutating={isMutating}
             onCreateProduct={onCreateProduct}
+            onUpdateProduct={onUpdateProduct}
             onSubmit={async (payload) => {
               await onCreateOrder(payload);
               setOpen(false);
@@ -138,7 +141,11 @@ export function QuickEntrySheet({
             isMutating={isMutating}
             previous={"amount" in (lastEntry ?? {}) ? (lastEntry as Expense) : null}
             onSubmit={async (payload) => {
-              await onCreateExpense(payload);
+              if (Array.isArray(payload)) {
+                await Promise.all(payload.map((entry) => onCreateExpense(entry)));
+              } else {
+                await onCreateExpense(payload);
+              }
               setOpen(false);
             }}
           />
@@ -152,7 +159,8 @@ function OrderForm({
   products,
   isMutating,
   onSubmit,
-  onCreateProduct
+  onCreateProduct,
+  onUpdateProduct
 }: {
   products: Product[];
   isMutating: boolean;
@@ -163,6 +171,7 @@ function OrderForm({
     createdAt?: string;
   }) => Promise<void>;
   onCreateProduct: (payload: Record<string, unknown>) => Promise<Product>;
+  onUpdateProduct: (id: string, payload: Record<string, unknown>) => Promise<Product>;
 }) {
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>("SINPE");
   const [selectedDate, setSelectedDate] = React.useState(todayDateInputValue);
@@ -200,10 +209,45 @@ function OrderForm({
           category: product.category as IncomeCategory,
           quantity: 1,
           unitPrice: product.defaultPrice,
+          originalUnitPrice: product.defaultPrice,
           subtotal: product.defaultPrice
         }
       ];
     });
+  }
+
+  async function applyPriceChange(
+    item: DraftItem,
+    nextPrice: number,
+    reason: string,
+    updateCatalog: boolean
+  ) {
+    setItems((current) =>
+      current.map((currentItem) =>
+        currentItem.productId === item.productId
+          ? {
+              ...currentItem,
+              unitPrice: nextPrice,
+              originalUnitPrice: currentItem.originalUnitPrice ?? item.unitPrice,
+              priceChangeReason: reason,
+              subtotal: currentItem.quantity * nextPrice
+            }
+          : currentItem
+      )
+    );
+
+    if (updateCatalog) {
+      const product = products.find((entry) => String(entry._id) === item.productId);
+      if (product) {
+        await onUpdateProduct(item.productId, {
+          name: product.name,
+          kind: product.kind ?? "sell",
+          category: product.category,
+          defaultPrice: nextPrice,
+          active: product.active
+        });
+      }
+    }
   }
 
   function changeQuantity(productId: string, delta: number) {
@@ -331,6 +375,7 @@ function OrderForm({
                 onMinus={() => changeQuantity(item.productId, -1)}
                 onPlus={() => changeQuantity(item.productId, 1)}
               />
+              <PriceChangeButton item={item} onApply={applyPriceChange} />
               <Badge variant="success">{formatCRC(item.subtotal)}</Badge>
             </motion.div>
           ))}
@@ -345,6 +390,71 @@ function OrderForm({
   );
 }
 
+function PriceChangeButton({
+  item,
+  onApply
+}: {
+  item: DraftItem;
+  onApply: (item: DraftItem, nextPrice: number, reason: string, updateCatalog: boolean) => Promise<void>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [price, setPrice] = React.useState(String(item.unitPrice));
+  const [reason, setReason] = React.useState(item.priceChangeReason ?? "");
+  const [updateCatalog, setUpdateCatalog] = React.useState(false);
+  const changed = Number(price) > 0 && Number(price) !== item.unitPrice;
+
+  async function handleApply() {
+    if (!changed || !reason.trim()) return;
+    await onApply(item, Number(price), reason.trim(), updateCatalog);
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <Button type="button" variant="secondary" size="icon" onClick={() => setOpen(true)} aria-label="Cambiar precio">
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Cambiar precio</SheetTitle>
+            <SheetDescription>{item.productName}</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <Label>Nuevo precio</Label>
+              <Input value={price} onChange={(event) => setPrice(event.target.value)} inputMode="numeric" pattern="[0-9]*" />
+            </div>
+            <div className="space-y-2">
+              <Label>Detalle del cambio del precio</Label>
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Ej: precio especial, promo, ajuste manual..."
+                className="min-h-28 w-full resize-none rounded-2xl border bg-background p-4 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="rounded-2xl border bg-secondary p-3">
+              <p className="mb-2 text-sm font-semibold">¿Actualizar precio del producto?</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={!updateCatalog ? "default" : "secondary"} onClick={() => setUpdateCatalog(false)}>
+                  Solo esta orden
+                </Button>
+                <Button type="button" variant={updateCatalog ? "default" : "secondary"} onClick={() => setUpdateCatalog(true)}>
+                  Cambiar producto
+                </Button>
+              </div>
+            </div>
+            <Button type="button" size="lg" className="w-full" disabled={!changed || !reason.trim()} onClick={handleApply}>
+              Aplicar cambio
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
 function ExpenseForm({
   products,
   isMutating,
@@ -354,7 +464,7 @@ function ExpenseForm({
   products: Product[];
   isMutating: boolean;
   previous: Expense | null;
-  onSubmit: (payload: Record<string, unknown>) => Promise<void>;
+  onSubmit: (payload: Record<string, unknown> | Array<Record<string, unknown>>) => Promise<void>;
 }) {
   const [amount, setAmount] = React.useState(previous?.amount ? String(previous.amount) : "");
   const [category, setCategory] = React.useState<ExpenseCategory>(
@@ -362,6 +472,13 @@ function ExpenseForm({
   );
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
   const [productSearch, setProductSearch] = React.useState("");
+  const [expenseLines, setExpenseLines] = React.useState<Array<{
+    amount: number;
+    category: ExpenseCategory;
+    productId?: string;
+    productName?: string;
+    note?: string;
+  }>>([]);
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>("SINPE");
   const [selectedDate, setSelectedDate] = React.useState(todayDateInputValue);
   const [receiptNumber, setReceiptNumber] = React.useState("");
@@ -370,24 +487,57 @@ function ExpenseForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    await onSubmit({
-      amount: Number(amount),
-      category,
-      productId: selectedProduct?._id ? String(selectedProduct._id) : undefined,
-      productName: selectedProduct?.name,
+    const currentLine = buildCurrentExpenseLine();
+    const lines = currentLine ? [...expenseLines, currentLine] : expenseLines;
+
+    if (!lines.length) return;
+
+    await onSubmit(lines.map((line) => ({
+      ...line,
       paymentMethod,
       createdAt: toLocalDateIso(selectedDate),
       receiptNumber,
       vendorName,
-      note
-    });
+      note: line.note
+    })));
+
     setAmount("");
     setSelectedProduct(null);
     setProductSearch("");
+    setExpenseLines([]);
     setReceiptNumber("");
     setVendorName("");
     setNote("");
   }
+
+  function buildCurrentExpenseLine() {
+    const parsedAmount = Number(amount);
+
+    if (!parsedAmount || parsedAmount <= 0) {
+      return null;
+    }
+
+    return {
+      amount: parsedAmount,
+      category,
+      productId: selectedProduct?._id ? String(selectedProduct._id) : undefined,
+      productName: selectedProduct?.name,
+      note
+    };
+  }
+
+  function addCurrentExpenseLine() {
+    const line = buildCurrentExpenseLine();
+    if (!line) return;
+    setExpenseLines((current) => [...current, line]);
+    setAmount("");
+    setSelectedProduct(null);
+    setProductSearch("");
+    setCategory(EXPENSE_CATEGORIES[0]);
+    setNote("");
+  }
+
+  const pendingTotal = expenseLines.reduce((total, line) => total + line.amount, 0) + Number(amount || 0);
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
@@ -459,8 +609,39 @@ function ExpenseForm({
         />
       </div>
       <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota opcional" />
-      <Button type="submit" size="lg" variant="destructive" className="w-full" disabled={!amount || isMutating}>
-        {isMutating ? "Guardando..." : "Guardar gasto"}
+      <Button type="button" variant="outline" className="w-full" disabled={!amount} onClick={addCurrentExpenseLine}>
+        <Plus className="h-4 w-4" />
+        Agregar otro gasto a esta factura
+      </Button>
+
+      {expenseLines.length ? (
+        <div className="space-y-2 rounded-2xl border bg-muted/30 p-3">
+          <Label>Gastos en esta factura</Label>
+          {expenseLines.map((line, index) => (
+            <div key={`${line.category}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-background p-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{line.productName ?? line.category}</p>
+                <p className="text-xs text-muted-foreground">{line.category}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-red-600">{formatCRC(line.amount)}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => setExpenseLines((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                >
+                  Quitar
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <Button type="submit" size="lg" variant="destructive" className="w-full" disabled={(!amount && !expenseLines.length) || isMutating}>
+        {isMutating ? "Guardando..." : `Guardar gastos · ${formatCRC(pendingTotal)}`}
       </Button>
     </form>
   );
