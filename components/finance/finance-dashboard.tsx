@@ -148,12 +148,7 @@ export function FinanceDashboard() {
 
             <ChartsPanel summary={summary} />
             <InsightsPanel summary={summary} />
-            <ProductCatalog
-              products={products}
-              onCreate={createProduct}
-              onUpdate={updateProduct}
-              onDelete={deleteProduct}
-            />
+         
 
             <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <RecentTransactions
@@ -163,6 +158,12 @@ export function FinanceDashboard() {
               />
               <DailyNote key={String(summary.dailyNote?.updatedAt ?? "empty-note")} note={summary.dailyNote} onSave={saveDailyNote} />
             </section>
+               <ProductCatalog
+              products={products}
+              onCreate={createProduct}
+              onUpdate={updateProduct}
+              onDelete={deleteProduct}
+            />
           </>
         )}
       </div>
