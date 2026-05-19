@@ -92,8 +92,8 @@ export async function getDashboardSummary(input: RangeInput): Promise<DashboardS
 
   return {
     range: {
-      start: selected.start.toISOString(),
-      end: selected.end.toISOString()
+      start: dateKey(selected.start),
+      end: dateKey(selected.end)
     },
     topCards: {
       todayIncome,
@@ -304,7 +304,7 @@ function strongestSalesDay(orders: Order[]) {
     return null;
   }
 
-  const formatter = new Intl.DateTimeFormat("es-CR", { weekday: "long" });
+  const formatter = new Intl.DateTimeFormat("es-CR", { timeZone: "America/Costa_Rica", weekday: "long" });
   const map = new Map<string, number>();
 
   orders.forEach((order) => {
@@ -317,11 +317,10 @@ function strongestSalesDay(orders: Order[]) {
 
 function weekLabel(date: Date) {
   const start = startOfWeek(date);
-  return `${start.getDate()}/${start.getMonth() + 1}`;
+  const [, month, day] = dateKey(start).split("-");
+  return `${Number(day)}/${Number(month)}`;
 }
 
 function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }

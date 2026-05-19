@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { AuthRequiredError, requireAuth } from "@/lib/auth";
 import { getCollections } from "@/lib/collections";
+import { upsertProvider } from "@/lib/providers";
 import { expenseSchema, cleanOptional } from "@/lib/validators";
 
 export async function GET(request: Request) {
@@ -26,9 +27,11 @@ export async function POST(request: Request) {
   try {
     await requireAuth();
     const payload = expenseSchema.parse(await request.json());
-    const { expenses } = await getCollections();
+    const { expenses, providers } = await getCollections();
     const now = new Date();
     const createdAt = payload.createdAt ?? now;
+    const vendorName = cleanOptional(payload.vendorName);
+    await upsertProvider(providers, vendorName);
     const result = await expenses.insertOne({
       amount: payload.amount,
       category: payload.category,
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
       productName: cleanOptional(payload.productName),
       paymentMethod: payload.paymentMethod,
       receiptNumber: cleanOptional(payload.receiptNumber),
-      vendorName: cleanOptional(payload.vendorName),
+      vendorName,
       note: cleanOptional(payload.note),
       createdAt,
       updatedAt: now

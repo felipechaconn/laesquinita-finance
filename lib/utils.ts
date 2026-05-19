@@ -24,8 +24,8 @@ export function formatCompactCRC(value: number) {
 
 export function formatDateTime(value: string | Date) {
   return new Intl.DateTimeFormat("es-CR", {
-    dateStyle: "medium",
-    timeStyle: "short"
+    timeZone: "America/Costa_Rica",
+    dateStyle: "medium"
   }).format(new Date(value));
 }
 

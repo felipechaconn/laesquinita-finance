@@ -48,6 +48,11 @@ export const productSchema = z
     category: normalizeProductCategory(product.kind, product.category)
   }));
 
+export const providerSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  active: z.boolean().default(true)
+});
+
 export const orderItemSchema = z.object({
   productId: z.string().min(1),
   productName: z.string().trim().min(1).max(80),

@@ -17,6 +17,7 @@ import {
 import { useTheme } from "next-themes";
 
 import { ChartsPanel } from "@/components/finance/charts-panel";
+import { DailyReportPanel } from "@/components/finance/daily-report";
 import { DailyNote } from "@/components/finance/daily-note";
 import { DashboardSkeleton } from "@/components/finance/dashboard-skeleton";
 import { InsightsPanel } from "@/components/finance/insights-panel";
@@ -37,6 +38,7 @@ export function FinanceDashboard() {
     setRange,
     summary,
     products,
+    providers,
     isLoading,
     isMutating,
     error,
@@ -46,6 +48,7 @@ export function FinanceDashboard() {
     updateOrder,
     createExpense,
     createProduct,
+    createProvider,
     updateProduct,
     deleteProduct,
     deleteTransaction,
@@ -148,7 +151,7 @@ export function FinanceDashboard() {
 
             <ChartsPanel summary={summary} />
             <InsightsPanel summary={summary} />
-         
+            <DailyReportPanel />
 
             <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <RecentTransactions
@@ -158,7 +161,7 @@ export function FinanceDashboard() {
               />
               <DailyNote key={String(summary.dailyNote?.updatedAt ?? "empty-note")} note={summary.dailyNote} onSave={saveDailyNote} />
             </section>
-               <ProductCatalog
+            <ProductCatalog
               products={products}
               onCreate={createProduct}
               onUpdate={updateProduct}
@@ -170,11 +173,13 @@ export function FinanceDashboard() {
 
       <QuickEntrySheet
         products={products}
+        providers={providers}
         isMutating={isMutating}
         lastEntry={lastEntry}
         onCreateOrder={createOrder}
         onCreateExpense={createExpense}
         onCreateProduct={createProduct}
+        onCreateProvider={createProvider}
         onUpdateProduct={updateProduct}
       />
     </main>

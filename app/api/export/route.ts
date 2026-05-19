@@ -30,7 +30,7 @@ export async function GET() {
     orderRows.forEach((order) =>
       ordersSheet.addRow({
         orderNumber: order.orderNumber,
-        date: new Date(order.createdAt).toLocaleString("es-CR"),
+        date: new Date(order.createdAt).toLocaleDateString("es-CR", { timeZone: "America/Costa_Rica" }),
         paymentMethod: order.paymentMethod,
         items: order.items.map((item) => `${item.quantity}x ${item.productName}`).join(", "),
         totalAmount: order.totalAmount,
@@ -51,7 +51,7 @@ export async function GET() {
     ];
     expenseRows.forEach((expense) =>
       expensesSheet.addRow({
-        date: new Date(expense.createdAt).toLocaleString("es-CR"),
+        date: new Date(expense.createdAt).toLocaleDateString("es-CR", { timeZone: "America/Costa_Rica" }),
         productName: expense.productName ?? "",
         category: expense.category,
         paymentMethod: expense.paymentMethod,

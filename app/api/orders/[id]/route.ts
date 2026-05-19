@@ -58,6 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           paymentMethod: payload.paymentMethod,
           items,
           totalAmount,
+          ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
           note: cleanOptional(payload.note),
           updatedAt: now,
           updatedBy: user.id

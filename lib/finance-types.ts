@@ -19,12 +19,14 @@ export const EXPENSE_CATEGORIES = [
 export const PAYMENT_METHODS = ["SINPE", "Efectivo", "Transferencia", "Tarjeta"] as const;
 export const RANGE_KEYS = ["today", "week", "month", "custom"] as const;
 export const PRODUCT_KINDS = ["sell", "buy"] as const;
+export const REPORT_TYPES = ["all", "orders", "expenses"] as const;
 
 export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export type RangeKey = (typeof RANGE_KEYS)[number];
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
+export type ReportType = (typeof REPORT_TYPES)[number];
 
 export type Product = {
   _id?: ObjectId | string;
@@ -38,6 +40,16 @@ export type Product = {
   deletedAt?: Date | string;
   deletedBy?: string;
   voidReason?: string;
+};
+
+export type Provider = {
+  _id?: ObjectId | string;
+  name: string;
+  normalizedName?: string;
+  active: boolean;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+  deletedAt?: Date | string;
 };
 
 export type OrderItem = {
@@ -130,4 +142,33 @@ export type DashboardSummary = {
   }>;
   insights: string[];
   dailyNote?: DailyNote | null;
+};
+
+export type DailyReportRow = {
+  id: string;
+  type: "order" | "expense";
+  date: string;
+  title: string;
+  category: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  quantity?: number;
+  details: string;
+  reference?: string;
+  note?: string;
+};
+
+export type DailyReport = {
+  date: string;
+  type: ReportType;
+  totals: {
+    income: number;
+    expenses: number;
+    profit: number;
+    orders: number;
+    expenseCount: number;
+    unitsSold: number;
+    averageTicket: number;
+  };
+  rows: DailyReportRow[];
 };

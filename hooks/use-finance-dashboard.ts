@@ -3,7 +3,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-import type { DashboardSummary, Expense, Order, Product, RangeKey } from "@/lib/finance-types";
+import { dateKey } from "@/lib/date-ranges";
+import type { DashboardSummary, Expense, Order, Product, Provider, RangeKey } from "@/lib/finance-types";
 
 type RangeState = {
   range: RangeKey;
@@ -15,6 +16,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
   const [range, setRange] = React.useState<RangeState>(initialRange);
   const [summary, setSummary] = React.useState<DashboardSummary | null>(null);
   const [products, setProducts] = React.useState<Product[]>([]);
+  const [providers, setProviders] = React.useState<Provider[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isMutating, setIsMutating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -27,9 +29,10 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     if (range.end) params.set("end", range.end);
 
     try {
-      const [summaryResponse, productsResponse] = await Promise.all([
+      const [summaryResponse, productsResponse, providersResponse] = await Promise.all([
         fetch(`/api/finance/summary?${params.toString()}`, { cache: "no-store" }),
-        fetch("/api/products", { cache: "no-store" })
+        fetch("/api/products", { cache: "no-store" }),
+        fetch("/api/providers", { cache: "no-store" })
       ]);
 
       if (!summaryResponse.ok) {
@@ -38,9 +41,13 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
       if (!productsResponse.ok) {
         throw new Error((await productsResponse.json()).error ?? "No se pudieron cargar productos.");
       }
+      if (!providersResponse.ok) {
+        throw new Error((await providersResponse.json()).error ?? "No se pudieron cargar proveedores.");
+      }
 
       setSummary(await summaryResponse.json());
       setProducts(await productsResponse.json());
+      setProviders(await providersResponse.json());
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Error inesperado.";
       setError(message);
@@ -122,6 +129,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
       }
 
       const expense = await response.json();
+      await ensureProviderFromExpense(payload);
       setLastEntry(expense);
       toast.success("Gasto guardado");
       await load();
@@ -150,6 +158,45 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     setProducts((current) => [...current, product].sort((a, b) => String(a.name).localeCompare(String(b.name))));
     toast.success("Producto agregado");
     return product;
+  }
+
+  async function createProvider(payload: Record<string, unknown>) {
+    const response = await fetch("/api/providers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error((await response.json()).error ?? "No se pudo crear el proveedor.");
+    }
+
+    const provider = (await response.json()) as Provider;
+    setProviders((current) =>
+      [...current.filter((item) => item.name.toLowerCase() !== provider.name.toLowerCase()), provider].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      )
+    );
+    return provider;
+  }
+
+  async function ensureProviderFromExpense(payload: Record<string, unknown>) {
+    const vendorName = typeof payload.vendorName === "string" ? payload.vendorName.trim() : "";
+
+    if (!vendorName) {
+      return;
+    }
+
+    if (providers.some((provider) => provider.name.toLowerCase() === vendorName.toLowerCase())) {
+      return;
+    }
+
+    try {
+      await createProvider({ name: vendorName, active: true });
+      toast.success(`Proveedor ${vendorName} agregado`);
+    } catch {
+      await load();
+    }
   }
 
   async function updateProduct(id: string, payload: Record<string, unknown>) {
@@ -229,7 +276,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
   }
 
   async function saveDailyNote(note: string) {
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = dateKey(new Date());
     const response = await fetch("/api/daily-notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -249,6 +296,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     setRange,
     summary,
     products,
+    providers,
     isLoading,
     isMutating,
     error,
@@ -258,6 +306,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     updateOrder,
     createExpense,
     createProduct,
+    createProvider,
     updateProduct,
     deleteProduct,
     deleteTransaction,

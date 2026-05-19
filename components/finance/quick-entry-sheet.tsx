@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
-import { CalendarDays, Copy, Minus, Pencil, Plus, PlusCircle, Search, ShoppingCart, Wallet } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { CalendarDays, CheckCircle2, Copy, Minus, Pencil, Plus, PlusCircle, Search, ShoppingCart, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,8 @@ import {
   type Order,
   type OrderItem,
   type PaymentMethod,
-  type Product
+  type Product,
+  type Provider
 } from "@/lib/finance-types";
 import { cn, formatCRC } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ type DraftItem = OrderItem;
 
 type QuickEntrySheetProps = {
   products: Product[];
+  providers: Provider[];
   isMutating: boolean;
   lastEntry: Order | Expense | null;
   onCreateOrder: (payload: {
@@ -38,16 +40,19 @@ type QuickEntrySheetProps = {
   }) => Promise<Order>;
   onCreateExpense: (payload: Record<string, unknown>) => Promise<Expense>;
   onCreateProduct: (payload: Record<string, unknown>) => Promise<Product>;
+  onCreateProvider: (payload: Record<string, unknown>) => Promise<Provider>;
   onUpdateProduct: (id: string, payload: Record<string, unknown>) => Promise<Product>;
 };
 
 export function QuickEntrySheet({
   products,
+  providers,
   isMutating,
   lastEntry,
   onCreateOrder,
   onCreateExpense,
   onCreateProduct,
+  onCreateProvider,
   onUpdateProduct
 }: QuickEntrySheetProps) {
   const [open, setOpen] = React.useState(false);
@@ -138,8 +143,10 @@ export function QuickEntrySheet({
         ) : (
           <ExpenseForm
             products={products}
+            providers={providers}
             isMutating={isMutating}
             previous={"amount" in (lastEntry ?? {}) ? (lastEntry as Expense) : null}
+            onCreateProvider={onCreateProvider}
             onSubmit={async (payload) => {
               if (Array.isArray(payload)) {
                 await Promise.all(payload.map((entry) => onCreateExpense(entry)));
@@ -180,6 +187,8 @@ function OrderForm({
   const [search, setSearch] = React.useState("");
   const [nextNumber, setNextNumber] = React.useState<number | null>(null);
   const [showNewProduct, setShowNewProduct] = React.useState(false);
+  const [addedProduct, setAddedProduct] = React.useState<{ name: string; quantity: number; nonce: number } | null>(null);
+  const addedProductNonce = React.useRef(0);
   const total = items.reduce((sum, item) => sum + item.subtotal, 0);
 
   React.useEffect(() => {
@@ -191,8 +200,17 @@ function OrderForm({
 
   function addProduct(product: Product) {
     const id = String(product._id);
+    const nextQuantity = (items.find((item) => item.productId === id)?.quantity ?? 0) + 1;
+
+    setAddedProduct({
+      name: product.name,
+      quantity: nextQuantity,
+      nonce: (addedProductNonce.current += 1)
+    });
+
     setItems((current) => {
       const found = current.find((item) => item.productId === id);
+
       if (found) {
         return current.map((item) =>
           item.productId === id
@@ -215,6 +233,16 @@ function OrderForm({
       ];
     });
   }
+
+  React.useEffect(() => {
+    if (!addedProduct) return;
+
+    const timeout = window.setTimeout(() => {
+      setAddedProduct(null);
+    }, 2400);
+
+    return () => window.clearTimeout(timeout);
+  }, [addedProduct]);
 
   async function applyPriceChange(
     item: DraftItem,
@@ -311,6 +339,8 @@ function OrderForm({
             className="pl-10"
           />
         </div>
+
+        <ProductAddedNotice product={addedProduct} context="orden" />
 
         <div className="max-h-72 space-y-4 overflow-y-auto pr-1">
           {INCOME_CATEGORIES.map((category) => {
@@ -457,13 +487,17 @@ function PriceChangeButton({
 
 function ExpenseForm({
   products,
+  providers,
   isMutating,
   previous,
+  onCreateProvider,
   onSubmit
 }: {
   products: Product[];
+  providers: Provider[];
   isMutating: boolean;
   previous: Expense | null;
+  onCreateProvider: (payload: Record<string, unknown>) => Promise<Provider>;
   onSubmit: (payload: Record<string, unknown> | Array<Record<string, unknown>>) => Promise<void>;
 }) {
   const [manualAmount, setManualAmount] = React.useState(previous?.amount ? String(previous.amount) : "");
@@ -486,6 +520,8 @@ function ExpenseForm({
   const [receiptNumber, setReceiptNumber] = React.useState("");
   const [vendorName, setVendorName] = React.useState("");
   const [note, setNote] = React.useState("");
+  const [addedProduct, setAddedProduct] = React.useState<{ name: string; quantity: number; nonce: number } | null>(null);
+  const addedProductNonce = React.useRef(0);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -510,6 +546,19 @@ function ExpenseForm({
     setReceiptNumber("");
     setVendorName("");
     setNote("");
+  }
+
+  async function saveProviderOption(name: string) {
+    const trimmed = name.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    const exists = providers.some((provider) => provider.name.toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+      await onCreateProvider({ name: trimmed, active: true });
+    }
   }
 
   function buildManualExpenseLine() {
@@ -541,6 +590,14 @@ function ExpenseForm({
 
   function addBuyProduct(product: Product) {
     const id = String(product._id);
+    const nextQuantity = (expenseLines.find((line) => line.productId === id)?.quantity ?? 0) + 1;
+
+    setAddedProduct({
+      name: product.name,
+      quantity: nextQuantity,
+      nonce: (addedProductNonce.current += 1)
+    });
+
     setExpenseLines((current) => {
       const found = current.find((line) => line.productId === id);
 
@@ -572,6 +629,16 @@ function ExpenseForm({
     });
     setProductSearch("");
   }
+
+  React.useEffect(() => {
+    if (!addedProduct) return;
+
+    const timeout = window.setTimeout(() => {
+      setAddedProduct(null);
+    }, 2400);
+
+    return () => window.clearTimeout(timeout);
+  }, [addedProduct]);
 
   function updateExpenseLine(index: number, patch: Partial<{ quantity: number; unitCost: number; amount: number; note: string }>) {
     setExpenseLines((current) =>
@@ -605,6 +672,7 @@ function ExpenseForm({
         search={productSearch}
         onSearchChange={setProductSearch}
         onSelect={addBuyProduct}
+        addedProduct={addedProduct}
       />
 
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary p-1">
@@ -661,10 +729,11 @@ function ExpenseForm({
           onChange={(event) => setReceiptNumber(event.target.value)}
           placeholder="Factura o recibo"
         />
-        <Input
+        <ProviderCombobox
           value={vendorName}
-          onChange={(event) => setVendorName(event.target.value)}
-          placeholder="Proveedor opcional"
+          providers={providers}
+          onChange={setVendorName}
+          onCommit={saveProviderOption}
         />
       </div>
 
@@ -725,12 +794,14 @@ function BuyProductPicker({
   products,
   search,
   onSearchChange,
-  onSelect
+  onSelect,
+  addedProduct
 }: {
   products: Product[];
   search: string;
   onSearchChange: (value: string) => void;
   onSelect: (product: Product) => void;
+  addedProduct: { name: string; quantity: number; nonce: number } | null;
 }) {
   const buyProducts = products.filter((product) => {
     const text = `${product.name} ${product.category}`.toLowerCase();
@@ -751,6 +822,8 @@ function BuyProductPicker({
           className="pl-10"
         />
       </div>
+
+      <ProductAddedNotice product={addedProduct} context="factura" />
 
       <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
         {buyProducts.length ? (
@@ -777,6 +850,85 @@ function BuyProductPicker({
         )}
       </div>
     </div>
+  );
+}
+
+function ProviderCombobox({
+  value,
+  providers,
+  onChange,
+  onCommit
+}: {
+  value: string;
+  providers: Provider[];
+  onChange: (value: string) => void;
+  onCommit: (value: string) => Promise<void>;
+}) {
+  const listId = React.useId();
+  const activeProviders = providers.filter((provider) => provider.active);
+  const exists = activeProviders.some((provider) => provider.name.toLowerCase() === value.trim().toLowerCase());
+
+  async function handleBlur() {
+    try {
+      await onCommit(value);
+    } catch {
+      // The expense save path also persists providers, so a transient dropdown save failure should not block entry.
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Input
+        value={value}
+        list={listId}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => void handleBlur()}
+        placeholder="Proveedor opcional"
+      />
+      <datalist id={listId}>
+        {activeProviders.map((provider) => (
+          <option key={String(provider._id ?? provider.name)} value={provider.name} />
+        ))}
+      </datalist>
+      {value.trim() && !exists ? (
+        <p className="px-1 text-xs text-muted-foreground">Se guardara como proveedor para la proxima factura.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ProductAddedNotice({
+  product,
+  context
+}: {
+  product: { name: string; quantity: number; nonce: number } | null;
+  context: "orden" | "factura";
+}) {
+  return (
+    <AnimatePresence mode="wait">
+      {product ? (
+        <motion.div
+          key={product.nonce}
+          initial={{ opacity: 0, y: -6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -6, scale: 0.98 }}
+          transition={{ duration: 0.18 }}
+          className="flex items-start gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-emerald-800 shadow-sm shadow-emerald-500/10 dark:text-emerald-200"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="mt-0.5 rounded-full bg-emerald-500/15 p-1">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">Has agregado {product.name}</span>
+            <span className="block text-xs text-emerald-700/80 dark:text-emerald-200/80">
+              {product.quantity > 1 ? `${product.quantity} unidades en la ${context}` : `Ya esta en la ${context}`}
+            </span>
+          </span>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
