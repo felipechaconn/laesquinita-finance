@@ -2,7 +2,24 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CalendarDays, CheckCircle2, Copy, Minus, Pencil, Plus, PlusCircle, Search, ShoppingCart, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Copy,
+  Fish,
+  Minus,
+  Package,
+  Pencil,
+  Plus,
+  PlusCircle,
+  Search,
+  ShoppingCart,
+  Utensils,
+  GlassWater,
+  Wallet
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,7 +86,7 @@ export function QuickEntrySheet({
           <Plus className="h-7 w-7" />
         </Button>
       </SheetTrigger>
-      <SheetContent>
+      <SheetContent className="md:max-w-4xl">
         <SheetHeader>
           <SheetTitle>Agregar movimiento</SheetTitle>
           <SheetDescription>Orden o gasto en pocos toques, pensado para usarlo en el local.</SheetDescription>
@@ -198,9 +215,10 @@ function OrderForm({
       .catch(() => setNextNumber(null));
   }, []);
 
-  function addProduct(product: Product) {
+  function addProduct(product: Product, quantity = 1) {
     const id = String(product._id);
-    const nextQuantity = (items.find((item) => item.productId === id)?.quantity ?? 0) + 1;
+    const cleanQuantity = Math.max(1, quantity);
+    const nextQuantity = (items.find((item) => item.productId === id)?.quantity ?? 0) + cleanQuantity;
 
     setAddedProduct({
       name: product.name,
@@ -214,7 +232,7 @@ function OrderForm({
       if (found) {
         return current.map((item) =>
           item.productId === id
-            ? { ...item, quantity: item.quantity + 1, subtotal: (item.quantity + 1) * item.unitPrice }
+            ? { ...item, quantity: item.quantity + cleanQuantity, subtotal: (item.quantity + cleanQuantity) * item.unitPrice }
             : item
         );
       }
@@ -225,10 +243,10 @@ function OrderForm({
           productId: id,
           productName: product.name,
           category: product.category as IncomeCategory,
-          quantity: 1,
+          quantity: cleanQuantity,
           unitPrice: product.defaultPrice,
           originalUnitPrice: product.defaultPrice,
-          subtotal: product.defaultPrice
+          subtotal: product.defaultPrice * cleanQuantity
         }
       ];
     });
@@ -303,9 +321,10 @@ function OrderForm({
     setNote("");
   }
 
-  const filteredProducts = products.filter((product) => {
+  const sellProducts = products.filter((product) => (product.kind ?? "sell") === "sell" && product.active);
+  const filteredProducts = sellProducts.filter((product) => {
     const text = `${product.name} ${product.category}`.toLowerCase();
-    return (product.kind ?? "sell") === "sell" && product.active && text.includes(search.toLowerCase());
+    return text.includes(search.toLowerCase());
   });
 
   return (
@@ -330,46 +349,54 @@ function OrderForm({
 
       <div className="space-y-3">
         <Label>Productos</Label>
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar ceviche, caldosa..."
-            className="pl-10"
-          />
-        </div>
 
         <ProductAddedNotice product={addedProduct} context="orden" />
 
-        <div className="max-h-72 space-y-4 overflow-y-auto pr-1">
-          {INCOME_CATEGORIES.map((category) => {
-            const grouped = filteredProducts.filter((product) => product.category === category);
-            if (!grouped.length) return null;
+        <GuidedProductPicker products={sellProducts} onAddProduct={addProduct} />
 
-            return (
-              <div key={category} className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category}</p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {grouped.map((product) => (
-                    <button
-                      key={String(product._id)}
-                      type="button"
-                      className="flex min-h-16 items-center justify-between rounded-2xl border bg-card p-3 text-left transition hover:bg-secondary"
-                      onClick={() => addProduct(product)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold">{product.name}</span>
-                        <span className="text-xs text-muted-foreground">{formatCRC(product.defaultPrice)}</span>
-                      </span>
-                      <PlusCircle className="h-5 w-5 text-primary" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <details className="rounded-2xl border bg-background p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">Buscar en todo el catálogo</summary>
+          <div className="mt-3 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar ceviche, caldosa..."
+                className="pl-10"
+              />
+            </div>
+
+            <div className="max-h-72 space-y-4 overflow-y-auto pr-1">
+              {INCOME_CATEGORIES.map((category) => {
+                const grouped = filteredProducts.filter((product) => product.category === category);
+                if (!grouped.length) return null;
+
+                return (
+                  <div key={category} className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category}</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {grouped.map((product) => (
+                        <button
+                          key={String(product._id)}
+                          type="button"
+                          className="flex min-h-16 items-center justify-between rounded-2xl border bg-card p-3 text-left transition hover:bg-secondary"
+                          onClick={() => addProduct(product)}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold">{product.name}</span>
+                            <span className="text-xs text-muted-foreground">{formatCRC(product.defaultPrice)}</span>
+                          </span>
+                          <PlusCircle className="h-5 w-5 text-primary" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </details>
 
         <Button type="button" variant="outline" className="w-full" onClick={() => setShowNewProduct((value) => !value)}>
           <Plus className="h-4 w-4" />
@@ -418,6 +445,418 @@ function OrderForm({
       </Button>
     </form>
   );
+}
+
+type GuidedCategory = "Ceviche" | "Caldosa" | "Otros";
+
+type GuidedStep = "category" | "size" | "product";
+
+const CEVICHE_SIZES = ["8oz", "12oz", "16oz", "22oz"] as const;
+const CALDOSA_SIZES = ["9oz", "12oz", "20oz"] as const;
+const PRODUCT_STYLES = ["Camaron", "Clasico", "Mixto", "Tropical"] as const;
+const PRODUCT_STYLE_ALIASES: Record<(typeof PRODUCT_STYLES)[number], string[]> = {
+  Camaron: ["camaron"],
+  Clasico: ["clasico", "clasica"],
+  Mixto: ["mixto", "mixta"],
+  Tropical: ["tropical"]
+};
+
+function GuidedProductPicker({
+  products,
+  onAddProduct
+}: {
+  products: Product[];
+  onAddProduct: (product: Product, quantity?: number) => void;
+}) {
+  const [category, setCategory] = React.useState<GuidedCategory | null>(null);
+  const [size, setSize] = React.useState("");
+  const [style, setStyle] = React.useState("");
+  const [quantity, setQuantity] = React.useState(1);
+  const step: GuidedStep = !category ? "category" : category !== "Otros" && !size ? "size" : "product";
+
+  const sizeOptions = category === "Ceviche" ? CEVICHE_SIZES : category === "Caldosa" ? CALDOSA_SIZES : [];
+  const styleOptions = React.useMemo(
+    () => getAvailableProductStyles(products, category, size),
+    [products, category, size]
+  );
+  const currentStepNumber = step === "category" ? 1 : step === "size" ? 2 : 3;
+  const suggestedProducts = React.useMemo(
+    () => findGuidedProducts(products, category, size, style),
+    [products, category, size, style]
+  );
+  const selectedProduct = suggestedProducts.length === 1 ? suggestedProducts[0] : null;
+
+  function resetAll() {
+    setCategory(null);
+    setSize("");
+    setStyle("");
+    setQuantity(1);
+  }
+
+  function back() {
+    if (step === "category") return;
+    if (step === "size") {
+      resetAll();
+      return;
+    }
+    if (category === "Otros") {
+      resetAll();
+      return;
+    }
+    setStyle("");
+    setSize("");
+    setQuantity(1);
+  }
+
+  function addAndContinue(product: Product) {
+    onAddProduct(product, quantity);
+    setStyle("");
+    setQuantity(1);
+  }
+
+  function addAndReset(product: Product) {
+    onAddProduct(product, quantity);
+    resetAll();
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[1.75rem] border bg-card shadow-sm">
+      <div className="border-b bg-secondary/50 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ingreso rápido</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold">
+              <span>{category ?? "Tipo"}</span>
+              {size ? (
+                <>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <span>{size}</span>
+                </>
+              ) : null}
+              {style ? (
+                <>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <span>{displayProductStyle(style, category)}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <StepPill active={currentStepNumber >= 1} current={currentStepNumber === 1} label="Tipo" />
+            <StepPill active={currentStepNumber >= 2} current={currentStepNumber === 2} label="Tamaño" />
+            <StepPill active={currentStepNumber >= 3} current={currentStepNumber === 3} label="Producto" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-5 p-4 sm:p-5">
+        {step !== "category" ? (
+          <Button type="button" variant="ghost" size="sm" className="h-9 px-2" onClick={back}>
+            <ArrowLeft className="h-4 w-4" />
+            Atrás
+          </Button>
+        ) : null}
+
+        {step === "category" ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(["Ceviche", "Caldosa", "Otros"] as const).map((option) => (
+              <GuidedTile
+                key={option}
+                title={option}
+                subtitle={guidedCategorySubtitle(option, products)}
+                icon={guidedCategoryIcon(option)}
+                tone={guidedCategoryTone(option)}
+                active={category === option}
+                onClick={() => {
+                  setCategory(option);
+                  setSize("");
+                  setStyle("");
+                  setQuantity(1);
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {step === "size" ? (
+          <div className="space-y-3">
+            <SectionHeading title={`Tamaño de ${category}`} detail="Toque una opción para continuar" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {sizeOptions.map((option) => (
+                <GuidedTile
+                  key={option}
+                  title={option}
+                  subtitle={`${countMatchingProducts(products, category, option)} productos`}
+                  tone="sky"
+                  active={size === option}
+                  onClick={() => setSize(option)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {step === "product" ? (
+          <div className="space-y-4">
+            {styleOptions.length ? (
+              <div className="space-y-3">
+                <SectionHeading title="Producto" detail={style ? "Listo para agregar" : "Elija el sabor o mezcla"} />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {styleOptions.map((option) => (
+                    <GuidedTile
+                      key={option}
+                      title={displayProductStyle(option, category)}
+                      subtitle={styleSubtitle(products, category, size, option)}
+                      tone={guidedStyleTone(option)}
+                      active={style === option}
+                      onClick={() => setStyle(option)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 rounded-2xl border bg-secondary/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Cantidad</p>
+                <p className="text-sm font-semibold">{quantity} unidad{quantity === 1 ? "" : "es"}</p>
+              </div>
+              <QuantityControl
+                quantity={quantity}
+                onMinus={() => setQuantity((current) => Math.max(1, current - 1))}
+                onPlus={() => setQuantity((current) => current + 1)}
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {suggestedProducts.map((product) => (
+                <ProductChoiceCard
+                  key={String(product._id)}
+                  product={product}
+                  quantity={quantity}
+                  selected={Boolean(selectedProduct && String(selectedProduct._id) === String(product._id))}
+                  onClick={() => addAndContinue(product)}
+                />
+              ))}
+            </div>
+
+            {!suggestedProducts.length ? (
+              <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+                No encontré ese producto en el catálogo activo. Revise el nombre o agréguelo como producto nuevo.
+              </div>
+            ) : null}
+
+            {selectedProduct ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="button" size="lg" onClick={() => addAndContinue(selectedProduct)}>
+                  <PlusCircle className="h-5 w-5" />
+                  Agregar más
+                </Button>
+                <Button type="button" size="lg" variant="secondary" onClick={() => addAndReset(selectedProduct)}>
+                  Agregar y cambiar producto
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function GuidedTile({
+  title,
+  subtitle,
+  icon,
+  tone = "neutral",
+  active,
+  onClick
+}: {
+  title: string;
+  subtitle: string;
+  icon?: React.ReactNode;
+  tone?: "neutral" | "sky" | "emerald" | "amber" | "rose";
+  active: boolean;
+  onClick: () => void;
+}) {
+  const tones = {
+    neutral: "bg-background text-foreground",
+    sky: "bg-sky-500/8 text-sky-800 dark:text-sky-200",
+    emerald: "bg-emerald-500/8 text-emerald-800 dark:text-emerald-200",
+    amber: "bg-yellow-500/10 text-yellow-800 dark:text-yellow-200",
+    rose: "bg-rose-500/8 text-rose-800 dark:text-rose-200"
+  };
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "group min-h-24 rounded-2xl border bg-background p-4 text-left transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md",
+        active && "border-primary bg-secondary shadow-sm"
+      )}
+      onClick={onClick}
+    >
+      <span className="mb-3 flex items-center justify-between gap-2">
+        <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", tones[tone])}>
+          {icon ?? <CheckCircle2 className="h-5 w-5" />}
+        </span>
+        {active ? <CheckCircle2 className="h-5 w-5 text-primary" /> : null}
+      </span>
+      <span className="block text-base font-bold">{title}</span>
+      <span className="mt-1 block text-xs text-muted-foreground">{subtitle}</span>
+    </button>
+  );
+}
+
+function StepPill({ active, current, label }: { active: boolean; current: boolean; label: string }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-3 py-1 text-xs font-semibold transition",
+        active ? "bg-primary/10 text-primary" : "bg-background text-muted-foreground",
+        current && "ring-2 ring-primary/20"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SectionHeading({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <div>
+        <p className="text-base font-bold">{title}</p>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProductChoiceCard({
+  product,
+  quantity,
+  selected,
+  onClick
+}: {
+  product: Product;
+  quantity: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex min-h-24 items-center justify-between gap-3 rounded-2xl border bg-background p-4 text-left transition hover:-translate-y-0.5 hover:border-primary hover:bg-secondary/60 hover:shadow-md",
+        selected && "border-primary bg-secondary/70 shadow-sm"
+      )}
+      onClick={onClick}
+    >
+      <span className="min-w-0">
+        <span className="flex items-center gap-2">
+          <span className="block truncate text-base font-bold">{product.name}</span>
+          {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : null}
+        </span>
+        <span className="mt-1 block text-xs text-muted-foreground">{formatCRC(product.defaultPrice)} c/u</span>
+      </span>
+      <span className="flex shrink-0 flex-col items-end gap-2">
+        <Badge variant="success" className="text-sm">{formatCRC(product.defaultPrice * quantity)}</Badge>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
+          <PlusCircle className="h-4 w-4" />
+          Agregar
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function findGuidedProducts(products: Product[], category: GuidedCategory | null, size: string, style: string) {
+  if (!category) return [];
+  if (category === "Otros") {
+    return products.filter((product) => product.category !== "Ceviche" && product.category !== "Caldosa");
+  }
+
+  const categoryMatches = products.filter((product) => product.category === category);
+  const sized = size ? categoryMatches.filter((product) => productHasSize(product, size)) : categoryMatches;
+  const styled = style ? sized.filter((product) => productHasStyle(product, style)) : sized;
+
+  return styled;
+}
+
+function countMatchingProducts(products: Product[], category: GuidedCategory | null, size: string) {
+  return findGuidedProducts(products, category, size, "").length;
+}
+
+function guidedCategorySubtitle(category: GuidedCategory, products: Product[]) {
+  const count =
+    category === "Otros"
+      ? products.filter((product) => product.category !== "Ceviche" && product.category !== "Caldosa").length
+      : products.filter((product) => product.category === category).length;
+
+  return `${count} en catálogo`;
+}
+
+function displayProductStyle(style: string, category?: GuidedCategory | null) {
+  if (style === "Camaron") return "Camarón";
+  if (style === "Clasico") return category === "Caldosa" ? "Clásica" : "Clásico";
+  if (style === "Mixto") return category === "Caldosa" ? "Mixta" : "Mixto";
+  return style;
+}
+
+function styleSubtitle(products: Product[], category: GuidedCategory | null, size: string, style: string) {
+  const matches = findGuidedProducts(products, category, size, style);
+  if (matches.length === 1) return formatCRC(matches[0].defaultPrice);
+
+  return `${matches.length} opciones`;
+}
+
+function guidedCategoryIcon(category: GuidedCategory) {
+  if (category === "Ceviche") return <Fish className="h-5 w-5" />;
+  if (category === "Caldosa") return <GlassWater className="h-5 w-5" />;
+  return <Package className="h-5 w-5" />;
+}
+
+function guidedCategoryTone(category: GuidedCategory) {
+  if (category === "Ceviche") return "sky" as const;
+  if (category === "Caldosa") return "emerald" as const;
+  return "amber" as const;
+}
+
+function guidedStyleTone(style: string) {
+  if (style === "Camaron") return "rose" as const;
+  if (style === "Tropical") return "emerald" as const;
+  if (style === "Mixto") return "amber" as const;
+  return "sky" as const;
+}
+
+function getAvailableProductStyles(products: Product[], category: GuidedCategory | null, size: string) {
+  if (!category || category === "Otros" || !size) return [];
+
+  return PRODUCT_STYLES.filter((style) =>
+    products.some(
+      (product) => product.category === category && productHasSize(product, size) && productHasStyle(product, style)
+    )
+  );
+}
+
+function productHasSize(product: Product, size: string) {
+  return normalizeCatalogText(product.name).includes(normalizeCatalogText(size));
+}
+
+function productHasStyle(product: Product, style: string) {
+  const normalizedName = normalizeCatalogText(product.name);
+  const aliases = PRODUCT_STYLE_ALIASES[style as (typeof PRODUCT_STYLES)[number]] ?? [style];
+
+  return aliases.some((alias) => normalizedName.includes(normalizeCatalogText(alias)));
+}
+
+function normalizeCatalogText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "");
 }
 
 function PriceChangeButton({
