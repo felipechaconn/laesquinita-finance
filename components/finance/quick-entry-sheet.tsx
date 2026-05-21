@@ -16,7 +16,6 @@ import {
   PlusCircle,
   Search,
   ShoppingCart,
-  Utensils,
   GlassWater,
   Wallet
 } from "lucide-react";

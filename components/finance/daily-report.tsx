@@ -83,7 +83,10 @@ export function DailyReportPanel() {
     return () => controller.abort();
   }, [loadReport]);
 
-  const rows = report?.rows ?? [];
+  const rows = React.useMemo(
+    () => [...(report?.rows ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [report?.rows]
+  );
 
   return (
     <Card className="overflow-hidden">

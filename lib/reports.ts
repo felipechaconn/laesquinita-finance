@@ -23,9 +23,7 @@ export async function getDailyReport(date: string, type: ReportType): Promise<Da
     (total, order) => total + order.items.reduce((itemTotal, item) => itemTotal + item.quantity, 0),
     0
   );
-  const rows = [...orderRows.map(orderToRow), ...expenseRows.map(expenseToRow)].sort(
-    (a, b) => Number(new Date(b.date)) - Number(new Date(a.date))
-  );
+  const rows = [...orderRows.map(orderToRow), ...expenseRows.map(expenseToRow)].sort(sortNewestFirst);
 
   return {
     date: day,
@@ -82,4 +80,8 @@ function parseReportDate(date: string) {
   }
 
   return dateKey(new Date());
+}
+
+function sortNewestFirst(a: DailyReportRow, b: DailyReportRow) {
+  return new Date(b.date).getTime() - new Date(a.date).getTime();
 }

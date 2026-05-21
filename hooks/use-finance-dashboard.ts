@@ -18,12 +18,14 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
   const [products, setProducts] = React.useState<Product[]>([]);
   const [providers, setProviders] = React.useState<Provider[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isMutating, setIsMutating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [lastEntry, setLastEntry] = React.useState<Order | Expense | null>(null);
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async ({ showToast = false }: { showToast?: boolean } = {}) => {
     setError(null);
+    setIsRefreshing(true);
     const params = new URLSearchParams({ range: range.range });
     if (range.start) params.set("start", range.start);
     if (range.end) params.set("end", range.end);
@@ -48,12 +50,16 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
       setSummary(await summaryResponse.json());
       setProducts(await productsResponse.json());
       setProviders(await providersResponse.json());
+      if (showToast) {
+        toast.success("Datos actualizados");
+      }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Error inesperado.";
       setError(message);
       toast.error(message);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [range]);
 
@@ -298,6 +304,7 @@ export function useFinanceDashboard(initialRange: RangeState = { range: "today" 
     products,
     providers,
     isLoading,
+    isRefreshing,
     isMutating,
     error,
     lastEntry,

@@ -29,7 +29,7 @@ import { RecentTransactions } from "@/components/finance/recent-transactions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinanceDashboard } from "@/hooks/use-finance-dashboard";
-import { formatCRC } from "@/lib/utils";
+import { cn, formatCRC } from "@/lib/utils";
 
 export function FinanceDashboard() {
   const { theme, setTheme } = useTheme();
@@ -40,6 +40,7 @@ export function FinanceDashboard() {
     products,
     providers,
     isLoading,
+    isRefreshing,
     isMutating,
     error,
     lastEntry,
@@ -85,8 +86,15 @@ export function FinanceDashboard() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" size="icon" onClick={() => void reload()} aria-label="Actualizar">
-                <RefreshCw className="h-4 w-4" />
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                onClick={() => void reload({ showToast: true })}
+                disabled={isRefreshing}
+                aria-label="Actualizar"
+              >
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
               </Button>
               <Button asChild variant="secondary" size="icon" aria-label="Exportar Excel">
                 <a href="/api/export">
