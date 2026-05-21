@@ -83,5 +83,17 @@ function parseReportDate(date: string) {
 }
 
 function sortNewestFirst(a: DailyReportRow, b: DailyReportRow) {
-  return new Date(b.date).getTime() - new Date(a.date).getTime();
+  const dateDifference = new Date(b.date).getTime() - new Date(a.date).getTime();
+  if (dateDifference !== 0) return dateDifference;
+
+  if (a.type === "order" && b.type === "order") {
+    return orderNumberFromTitle(b.title) - orderNumberFromTitle(a.title);
+  }
+
+  return 0;
+}
+
+function orderNumberFromTitle(title: string) {
+  const match = title.match(/#(\d+)/);
+  return match ? Number(match[1]) : 0;
 }

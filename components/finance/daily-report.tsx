@@ -84,7 +84,7 @@ export function DailyReportPanel() {
   }, [loadReport]);
 
   const rows = React.useMemo(
-    () => [...(report?.rows ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    () => [...(report?.rows ?? [])].sort(sortReportRowsNewestFirst),
     [report?.rows]
   );
 
@@ -623,4 +623,20 @@ function formatReportDate(value: string) {
     timeZone: "America/Costa_Rica",
     dateStyle: "medium"
   }).format(new Date(value));
+}
+
+function sortReportRowsNewestFirst(a: DailyReportRow, b: DailyReportRow) {
+  const dateDifference = new Date(b.date).getTime() - new Date(a.date).getTime();
+  if (dateDifference !== 0) return dateDifference;
+
+  if (a.type === "order" && b.type === "order") {
+    return orderNumberFromTitle(b.title) - orderNumberFromTitle(a.title);
+  }
+
+  return 0;
+}
+
+function orderNumberFromTitle(title: string) {
+  const match = title.match(/#(\d+)/);
+  return match ? Number(match[1]) : 0;
 }
