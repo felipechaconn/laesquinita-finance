@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { normalizeExpenseCategory } from "@/lib/category-normalization";
+import { dateKey } from "@/lib/date-ranges";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -42,6 +43,9 @@ import {
 import { cn, formatCRC } from "@/lib/utils";
 
 type DraftItem = OrderItem;
+
+const EXTRA_UNIT_PRICE = 150;
+const ORDER_EXTRAS = ["Piña", "Mango", "Chile panameño"] as const;
 
 type QuickEntrySheetProps = {
   products: Product[];
@@ -251,6 +255,41 @@ function OrderForm({
     });
   }
 
+  function changeExtra(extra: string, delta: number) {
+    const id = extraProductId(extra);
+
+    setItems((current) => {
+      const found = current.find((item) => item.productId === id);
+
+      if (!found && delta <= 0) {
+        return current;
+      }
+
+      if (!found) {
+        return [
+          ...current,
+          {
+            productId: id,
+            productName: `Extra ${extra}`,
+            category: "Otros",
+            quantity: 1,
+            unitPrice: EXTRA_UNIT_PRICE,
+            originalUnitPrice: EXTRA_UNIT_PRICE,
+            subtotal: EXTRA_UNIT_PRICE
+          }
+        ];
+      }
+
+      return current
+        .map((item) => {
+          if (item.productId !== id) return item;
+          const quantity = Math.max(0, item.quantity + delta);
+          return { ...item, quantity, subtotal: quantity * item.unitPrice };
+        })
+        .filter((item) => item.quantity > 0);
+    });
+  }
+
   React.useEffect(() => {
     if (!addedProduct) return;
 
@@ -271,12 +310,12 @@ function OrderForm({
       current.map((currentItem) =>
         currentItem.productId === item.productId
           ? {
-              ...currentItem,
-              unitPrice: nextPrice,
-              originalUnitPrice: currentItem.originalUnitPrice ?? item.unitPrice,
-              priceChangeReason: reason,
-              subtotal: currentItem.quantity * nextPrice
-            }
+            ...currentItem,
+            unitPrice: nextPrice,
+            originalUnitPrice: currentItem.originalUnitPrice ?? item.unitPrice,
+            priceChangeReason: reason,
+            subtotal: currentItem.quantity * nextPrice
+          }
           : currentItem
       )
     );
@@ -288,6 +327,8 @@ function OrderForm({
           name: product.name,
           kind: product.kind ?? "sell",
           category: product.category,
+          subcategory: product.subcategory,
+          size: product.size,
           defaultPrice: nextPrice,
           active: product.active
         });
@@ -344,7 +385,6 @@ function OrderForm({
         onDateChange={setSelectedDate}
       />
 
-      <PaymentPicker value={paymentMethod} onChange={setPaymentMethod} />
 
       <div className="space-y-3">
         <Label>Productos</Label>
@@ -404,6 +444,7 @@ function OrderForm({
 
         {showNewProduct ? (
           <NewProductForm
+            products={sellProducts}
             onCreate={async (payload) => {
               const product = await onCreateProduct(payload);
               addProduct(product);
@@ -412,7 +453,6 @@ function OrderForm({
           />
         ) : null}
       </div>
-
       {items.length ? (
         <div className="space-y-2">
           <Label>Orden actual</Label>
@@ -431,12 +471,15 @@ function OrderForm({
                 onMinus={() => changeQuantity(item.productId, -1)}
                 onPlus={() => changeQuantity(item.productId, 1)}
               />
-              <PriceChangeButton item={item} onApply={applyPriceChange} />
+              {isExtraItem(item) ? null : <PriceChangeButton item={item} onApply={applyPriceChange} />}
               <Badge variant="success">{formatCRC(item.subtotal)}</Badge>
             </motion.div>
           ))}
         </div>
       ) : null}
+
+      <ExtrasPicker items={items} onChangeExtra={changeExtra} />
+      <PaymentPicker value={paymentMethod} onChange={setPaymentMethod} />
 
       <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota opcional" />
       <Button type="submit" size="lg" className="w-full" disabled={!items.length || isMutating}>
@@ -448,12 +491,11 @@ function OrderForm({
 
 type GuidedCategory = "Ceviche" | "Caldosa" | "Otros";
 
-type GuidedStep = "category" | "size" | "product";
+type GuidedStep = "category" | "subcategory" | "size" | "product";
 
-const CEVICHE_SIZES = ["8oz", "12oz", "16oz", "22oz"] as const;
-const CALDOSA_SIZES = ["9oz", "12oz", "20oz"] as const;
-const PRODUCT_STYLES = ["Camaron", "Clasico", "Mixto", "Tropical"] as const;
-const PRODUCT_STYLE_ALIASES: Record<(typeof PRODUCT_STYLES)[number], string[]> = {
+const KNOWN_PRODUCT_SUBCATEGORIES = ["Normal", "Camaron", "Clasico", "Mixto", "Tropical"] as const;
+const PRODUCT_SUBCATEGORY_ALIASES: Record<(typeof KNOWN_PRODUCT_SUBCATEGORIES)[number], string[]> = {
+  Normal: ["normal", "tradicional"],
   Camaron: ["camaron"],
   Clasico: ["clasico", "clasica"],
   Mixto: ["mixto", "mixta"],
@@ -469,32 +511,38 @@ function GuidedProductPicker({
 }) {
   const [category, setCategory] = React.useState<GuidedCategory | null>(null);
   const [size, setSize] = React.useState("");
-  const [style, setStyle] = React.useState("");
+  const [subcategory, setSubcategory] = React.useState("");
   const [quantity, setQuantity] = React.useState(1);
-  const step: GuidedStep = !category ? "category" : category !== "Otros" && !size ? "size" : "product";
-
-  const sizeOptions = category === "Ceviche" ? CEVICHE_SIZES : category === "Caldosa" ? CALDOSA_SIZES : [];
-  const styleOptions = React.useMemo(
-    () => getAvailableProductStyles(products, category, size),
-    [products, category, size]
+  const subcategoryOptions = React.useMemo(
+    () => getAvailableProductSubcategories(products, category),
+    [products, category]
   );
-  const currentStepNumber = step === "category" ? 1 : step === "size" ? 2 : 3;
+  const step: GuidedStep =
+    !category
+      ? "category"
+      : category === "Otros"
+        ? "product"
+        : !subcategory
+          ? "subcategory"
+        : "size";
+  const sizeOptions = React.useMemo(() => getAvailableSizes(products, category, subcategory), [products, category, subcategory]);
+  const currentStepNumber = step === "category" ? 1 : step === "subcategory" || step === "product" ? 2 : 3;
   const suggestedProducts = React.useMemo(
-    () => findGuidedProducts(products, category, size, style),
-    [products, category, size, style]
+    () => findGuidedProducts(products, category, size, subcategory),
+    [products, category, size, subcategory]
   );
   const selectedProduct = suggestedProducts.length === 1 ? suggestedProducts[0] : null;
 
   function resetAll() {
     setCategory(null);
     setSize("");
-    setStyle("");
+    setSubcategory("");
     setQuantity(1);
   }
 
   function back() {
     if (step === "category") return;
-    if (step === "size") {
+    if (step === "subcategory" || step === "product") {
       resetAll();
       return;
     }
@@ -502,20 +550,24 @@ function GuidedProductPicker({
       resetAll();
       return;
     }
-    setStyle("");
+    setSubcategory("");
     setSize("");
     setQuantity(1);
   }
 
   function addAndContinue(product: Product) {
     onAddProduct(product, quantity);
-    setStyle("");
+    setSize("");
     setQuantity(1);
   }
 
-  function addAndReset(product: Product) {
-    onAddProduct(product, quantity);
-    resetAll();
+  function chooseSize(nextSize: string) {
+    const matches = findGuidedProducts(products, category, nextSize, subcategory);
+    setSize(nextSize);
+
+    if (matches.length === 1) {
+      addAndContinue(matches[0]);
+    }
   }
 
   return (
@@ -526,24 +578,24 @@ function GuidedProductPicker({
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ingreso rápido</p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold">
               <span>{category ?? "Tipo"}</span>
+              {subcategory ? (
+                <>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <span>{displayProductSubcategory(subcategory, category)}</span>
+                </>
+              ) : null}
               {size ? (
                 <>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   <span>{size}</span>
                 </>
               ) : null}
-              {style ? (
-                <>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  <span>{displayProductStyle(style, category)}</span>
-                </>
-              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <StepPill active={currentStepNumber >= 1} current={currentStepNumber === 1} label="Tipo" />
-            <StepPill active={currentStepNumber >= 2} current={currentStepNumber === 2} label="Tamaño" />
-            <StepPill active={currentStepNumber >= 3} current={currentStepNumber === 3} label="Producto" />
+            <StepPill active={currentStepNumber >= 2} current={currentStepNumber === 2} label="Subtipo" />
+            <StepPill active={currentStepNumber >= 3} current={currentStepNumber === 3} label="Tamaño" />
           </div>
         </div>
       </div>
@@ -569,7 +621,7 @@ function GuidedProductPicker({
                 onClick={() => {
                   setCategory(option);
                   setSize("");
-                  setStyle("");
+                  setSubcategory("");
                   setQuantity(1);
                 }}
               />
@@ -577,85 +629,79 @@ function GuidedProductPicker({
           </div>
         ) : null}
 
-        {step === "size" ? (
-          <div className="space-y-3">
-            <SectionHeading title={`Tamaño de ${category}`} detail="Toque una opción para continuar" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {sizeOptions.map((option) => (
-                <GuidedTile
-                  key={option}
-                  title={option}
-                  subtitle={`${countMatchingProducts(products, category, option)} productos`}
-                  tone="sky"
-                  active={size === option}
-                  onClick={() => setSize(option)}
-                />
-              ))}
-            </div>
+        {step === "subcategory" ? (
+          <div className="space-y-4">
+            <SectionHeading title={`Subtipo de ${category}`} detail="Elija la variedad antes del tamaño" />
+            {subcategoryOptions.length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {subcategoryOptions.map((option) => (
+                  <GuidedTile
+                    key={option}
+                    title={displayProductSubcategory(option, category)}
+                    subtitle={subcategorySubtitle(products, category, option)}
+                    tone={guidedSubcategoryTone(option)}
+                    active={subcategory === option}
+                    onClick={() => {
+                      setSubcategory(option);
+                      setSize("");
+                      setQuantity(1);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <GuidedEmptyState message="Este tipo no tiene subtipos configurados. Actualice el catálogo con subcategory y size para venderlo desde ingreso rápido." />
+            )}
           </div>
         ) : null}
 
         {step === "product" ? (
           <div className="space-y-4">
-            {styleOptions.length ? (
+            <SectionHeading title="Otros productos" detail="Elija el producto para agregar" />
+            <QuantityPicker quantity={quantity} onChange={setQuantity} />
+            <ProductChoices
+              products={suggestedProducts}
+              quantity={quantity}
+              selectedProduct={selectedProduct}
+              onAddProduct={addAndContinue}
+            />
+          </div>
+        ) : null}
+
+        {step === "size" ? (
+          <div className="space-y-4">
+            {category !== "Otros" ? (
               <div className="space-y-3">
-                <SectionHeading title="Producto" detail={style ? "Listo para agregar" : "Elija el sabor o mezcla"} />
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {styleOptions.map((option) => (
-                    <GuidedTile
-                      key={option}
-                      title={displayProductStyle(option, category)}
-                      subtitle={styleSubtitle(products, category, size, option)}
-                      tone={guidedStyleTone(option)}
-                      active={style === option}
-                      onClick={() => setStyle(option)}
-                    />
-                  ))}
-                </div>
+                <SectionHeading title={`Tamaño de ${displayProductSubcategory(subcategory, category)}`} detail="Toque el tamaño para agregar" />
+                <QuantityPicker quantity={quantity} onChange={setQuantity} />
+                {sizeOptions.length ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {sizeOptions.map((option) => (
+                      <GuidedTile
+                        key={option}
+                        title={option}
+                        subtitle={sizeSubtitle(products, category, subcategory, option)}
+                        tone="sky"
+                        active={size === option}
+                        onClick={() => chooseSize(option)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <GuidedEmptyState message="Este subtipo no tiene tamaños configurados. Revise que sus productos tengan size, por ejemplo 9oz o 20oz." />
+                )}
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-3 rounded-2xl border bg-secondary/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Cantidad</p>
-                <p className="text-sm font-semibold">{quantity} unidad{quantity === 1 ? "" : "es"}</p>
-              </div>
-              <QuantityControl
+            {size ? (
+              <ProductChoices
+                products={suggestedProducts}
                 quantity={quantity}
-                onMinus={() => setQuantity((current) => Math.max(1, current - 1))}
-                onPlus={() => setQuantity((current) => current + 1)}
+                selectedProduct={selectedProduct}
+                onAddProduct={addAndContinue}
               />
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              {suggestedProducts.map((product) => (
-                <ProductChoiceCard
-                  key={String(product._id)}
-                  product={product}
-                  quantity={quantity}
-                  selected={Boolean(selectedProduct && String(selectedProduct._id) === String(product._id))}
-                  onClick={() => addAndContinue(product)}
-                />
-              ))}
-            </div>
-
-            {!suggestedProducts.length ? (
-              <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
-                No encontré ese producto en el catálogo activo. Revise el nombre o agréguelo como producto nuevo.
-              </div>
             ) : null}
 
-            {selectedProduct ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" size="lg" onClick={() => addAndContinue(selectedProduct)}>
-                  <PlusCircle className="h-5 w-5" />
-                  Agregar más
-                </Button>
-                <Button type="button" size="lg" variant="secondary" onClick={() => addAndReset(selectedProduct)}>
-                  Agregar y cambiar producto
-                </Button>
-              </div>
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -732,6 +778,64 @@ function SectionHeading({ title, detail }: { title: string; detail: string }) {
   );
 }
 
+function GuidedEmptyState({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed bg-background p-4 text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+function QuantityPicker({ quantity, onChange }: { quantity: number; onChange: React.Dispatch<React.SetStateAction<number>> }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border bg-secondary/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-xs text-muted-foreground">Cantidad</p>
+        <p className="text-sm font-semibold">{quantity} unidad{quantity === 1 ? "" : "es"}</p>
+      </div>
+      <QuantityControl
+        quantity={quantity}
+        onMinus={() => onChange((current) => Math.max(1, current - 1))}
+        onPlus={() => onChange((current) => current + 1)}
+      />
+    </div>
+  );
+}
+
+function ProductChoices({
+  products,
+  quantity,
+  selectedProduct,
+  onAddProduct
+}: {
+  products: Product[];
+  quantity: number;
+  selectedProduct: Product | null;
+  onAddProduct: (product: Product) => void;
+}) {
+  return (
+    <>
+      <div className="grid gap-3 md:grid-cols-2">
+        {products.map((product) => (
+          <ProductChoiceCard
+            key={String(product._id)}
+            product={product}
+            quantity={quantity}
+            selected={Boolean(selectedProduct && String(selectedProduct._id) === String(product._id))}
+            onClick={() => onAddProduct(product)}
+          />
+        ))}
+      </div>
+
+      {!products.length ? (
+        <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+          No encontré ese producto en el catálogo activo. Revise el nombre o agréguelo como producto nuevo.
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function ProductChoiceCard({
   product,
   quantity,
@@ -770,21 +874,19 @@ function ProductChoiceCard({
   );
 }
 
-function findGuidedProducts(products: Product[], category: GuidedCategory | null, size: string, style: string) {
+function findGuidedProducts(products: Product[], category: GuidedCategory | null, size: string, subcategory: string) {
   if (!category) return [];
   if (category === "Otros") {
     return products.filter((product) => product.category !== "Ceviche" && product.category !== "Caldosa");
   }
 
   const categoryMatches = products.filter((product) => product.category === category);
-  const sized = size ? categoryMatches.filter((product) => productHasSize(product, size)) : categoryMatches;
-  const styled = style ? sized.filter((product) => productHasStyle(product, style)) : sized;
+  const subcategorized = subcategory
+    ? categoryMatches.filter((product) => productHasSubcategory(product, subcategory))
+    : categoryMatches;
+  const sized = size ? subcategorized.filter((product) => productHasSize(product, size)) : subcategorized;
 
-  return styled;
-}
-
-function countMatchingProducts(products: Product[], category: GuidedCategory | null, size: string) {
-  return findGuidedProducts(products, category, size, "").length;
+  return sized;
 }
 
 function guidedCategorySubtitle(category: GuidedCategory, products: Product[]) {
@@ -796,18 +898,25 @@ function guidedCategorySubtitle(category: GuidedCategory, products: Product[]) {
   return `${count} en catálogo`;
 }
 
-function displayProductStyle(style: string, category?: GuidedCategory | null) {
-  if (style === "Camaron") return "Camarón";
-  if (style === "Clasico") return category === "Caldosa" ? "Clásica" : "Clásico";
-  if (style === "Mixto") return category === "Caldosa" ? "Mixta" : "Mixto";
-  return style;
+function displayProductSubcategory(subcategory: string, category?: GuidedCategory | null) {
+  if (subcategory === "Camaron") return "Camarón";
+  if (subcategory === "Clasico") return category === "Caldosa" ? "Clásica" : "Clásico";
+  if (subcategory === "Mixto") return category === "Caldosa" ? "Mixta" : "Mixto";
+  return subcategory;
 }
 
-function styleSubtitle(products: Product[], category: GuidedCategory | null, size: string, style: string) {
-  const matches = findGuidedProducts(products, category, size, style);
+function subcategorySubtitle(products: Product[], category: GuidedCategory | null, subcategory: string) {
+  const matches = findGuidedProducts(products, category, "", subcategory);
   if (matches.length === 1) return formatCRC(matches[0].defaultPrice);
 
   return `${matches.length} opciones`;
+}
+
+function sizeSubtitle(products: Product[], category: GuidedCategory | null, subcategory: string, size: string) {
+  const matches = findGuidedProducts(products, category, size, subcategory);
+  if (matches.length === 1) return formatCRC(matches[0].defaultPrice);
+
+  return `${matches.length} productos`;
 }
 
 function guidedCategoryIcon(category: GuidedCategory) {
@@ -822,32 +931,61 @@ function guidedCategoryTone(category: GuidedCategory) {
   return "amber" as const;
 }
 
-function guidedStyleTone(style: string) {
-  if (style === "Camaron") return "rose" as const;
-  if (style === "Tropical") return "emerald" as const;
-  if (style === "Mixto") return "amber" as const;
+function guidedSubcategoryTone(subcategory: string) {
+  if (subcategory === "Camaron") return "rose" as const;
+  if (subcategory === "Tropical") return "emerald" as const;
+  if (subcategory === "Mixto") return "amber" as const;
   return "sky" as const;
 }
 
-function getAvailableProductStyles(products: Product[], category: GuidedCategory | null, size: string) {
-  if (!category || category === "Otros" || !size) return [];
+function getAvailableProductSubcategories(products: Product[], category: GuidedCategory | null) {
+  if (!category || category === "Otros") return [];
 
-  return PRODUCT_STYLES.filter((style) =>
-    products.some(
-      (product) => product.category === category && productHasSize(product, size) && productHasStyle(product, style)
-    )
-  );
+  const values = products
+    .filter((product) => product.category === category)
+    .map((product) => getProductSubcategory(product))
+    .filter((value): value is string => Boolean(value));
+
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+}
+
+function getAvailableSizes(products: Product[], category: GuidedCategory | null, subcategory: string) {
+  if (!category || category === "Otros") return [];
+
+  const sizes = products
+    .filter((product) => product.category === category && (!subcategory || productHasSubcategory(product, subcategory)))
+    .map((product) => getProductSize(product))
+    .filter((value): value is string => Boolean(value));
+
+  return Array.from(new Set(sizes)).sort(compareProductSize);
 }
 
 function productHasSize(product: Product, size: string) {
-  return normalizeCatalogText(product.name).includes(normalizeCatalogText(size));
+  return normalizeCatalogText(getProductSize(product) ?? "").includes(normalizeCatalogText(size));
 }
 
-function productHasStyle(product: Product, style: string) {
-  const normalizedName = normalizeCatalogText(product.name);
-  const aliases = PRODUCT_STYLE_ALIASES[style as (typeof PRODUCT_STYLES)[number]] ?? [style];
+function productHasSubcategory(product: Product, subcategory: string) {
+  return normalizeCatalogText(getProductSubcategory(product) ?? "") === normalizeCatalogText(subcategory);
+}
 
-  return aliases.some((alias) => normalizedName.includes(normalizeCatalogText(alias)));
+function getProductSize(product: Product) {
+  if (product.size) return product.size;
+
+  const match = product.name.match(/\b(\d{1,2})\s*o?z\b/i);
+  return match ? `${match[1]}oz` : undefined;
+}
+
+function getProductSubcategory(product: Product) {
+  if (product.subcategory) return product.subcategory;
+
+  const normalizedName = normalizeCatalogText(product.name);
+  const matched = KNOWN_PRODUCT_SUBCATEGORIES.find((subcategory) => {
+    const aliases = PRODUCT_SUBCATEGORY_ALIASES[subcategory];
+
+    return aliases.some((alias) => normalizedName.includes(normalizeCatalogText(alias)));
+  });
+
+  return matched;
 }
 
 function normalizeCatalogText(value: string) {
@@ -856,6 +994,18 @@ function normalizeCatalogText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "");
+}
+
+function compareProductSize(a: string, b: string) {
+  const aNumber = Number(a.match(/\d+/)?.[0] ?? 0);
+  const bNumber = Number(b.match(/\d+/)?.[0] ?? 0);
+
+  return aNumber - bNumber || a.localeCompare(b);
+}
+
+function normalizeProductSize(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\s*o?z$/i);
+  return match ? `${match[1]}oz` : value.trim();
 }
 
 function PriceChangeButton({
@@ -906,10 +1056,10 @@ function PriceChangeButton({
               <p className="mb-2 text-sm font-semibold">¿Actualizar precio del producto?</p>
               <div className="grid grid-cols-2 gap-2">
                 <Button type="button" variant={!updateCatalog ? "default" : "secondary"} onClick={() => setUpdateCatalog(false)}>
-                  Solo esta orden
+                  Solo a esta orden
                 </Button>
                 <Button type="button" variant={updateCatalog ? "default" : "secondary"} onClick={() => setUpdateCatalog(true)}>
-                  Cambiar producto
+                  Cambiar al producto
                 </Button>
               </div>
             </div>
@@ -1043,10 +1193,10 @@ function ExpenseForm({
         return current.map((line) =>
           line.productId === id
             ? {
-                ...line,
-                quantity: (line.quantity ?? 1) + 1,
-                amount: ((line.quantity ?? 1) + 1) * (line.unitCost ?? line.amount)
-              }
+              ...line,
+              quantity: (line.quantity ?? 1) + 1,
+              amount: ((line.quantity ?? 1) + 1) * (line.unitCost ?? line.amount)
+            }
             : line
         );
       }
@@ -1370,6 +1520,48 @@ function ProductAddedNotice({
   );
 }
 
+function ExtrasPicker({
+  items,
+  onChangeExtra
+}: {
+  items: DraftItem[];
+  onChangeExtra: (extra: string, delta: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>Extras</Label>
+        <span className="text-xs font-semibold text-muted-foreground">{formatCRC(EXTRA_UNIT_PRICE)} c/u</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {ORDER_EXTRAS.map((extra) => {
+          const quantity = items.find((item) => item.productId === extraProductId(extra))?.quantity ?? 0;
+
+          return (
+            <div key={extra} className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border bg-background p-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{extra}</p>
+                <p className="text-xs text-muted-foreground">{quantity ? formatCRC(quantity * EXTRA_UNIT_PRICE) : "Opcional"}</p>
+              </div>
+              {quantity ? (
+                <QuantityControl
+                  quantity={quantity}
+                  onMinus={() => onChangeExtra(extra, -1)}
+                  onPlus={() => onChangeExtra(extra, 1)}
+                />
+              ) : (
+                <Button type="button" variant="secondary" size="icon" onClick={() => onChangeExtra(extra, 1)} aria-label={`Agregar ${extra}`}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TransactionDatePicker({
   date,
   onDateChange
@@ -1417,11 +1609,7 @@ function PaymentPicker({ value, onChange }: { value: PaymentMethod; onChange: (v
 }
 
 function todayDateInputValue() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return dateKey(new Date());
 }
 
 function toLocalDateIso(date: string) {
@@ -1431,7 +1619,15 @@ function toLocalDateIso(date: string) {
     return new Date().toISOString();
   }
 
-  return new Date(`${date}T12:00:00`).toISOString();
+  return new Date(`${date}T12:00:00-06:00`).toISOString();
+}
+
+function extraProductId(extra: string) {
+  return `extra:${normalizeCatalogText(extra)}`;
+}
+
+function isExtraItem(item: DraftItem) {
+  return item.productId.startsWith("extra:");
 }
 
 function QuantityControl({ quantity, onMinus, onPlus }: { quantity: number; onMinus: () => void; onPlus: () => void }) {
@@ -1448,21 +1644,41 @@ function QuantityControl({ quantity, onMinus, onPlus }: { quantity: number; onMi
   );
 }
 
-function NewProductForm({ onCreate }: { onCreate: (payload: Record<string, unknown>) => Promise<void> }) {
+function NewProductForm({
+  products,
+  onCreate
+}: {
+  products: Product[];
+  onCreate: (payload: Record<string, unknown>) => Promise<void>;
+}) {
   const [name, setName] = React.useState("");
   const [category, setCategory] = React.useState<IncomeCategory>("Ceviche");
+  const [subcategory, setSubcategory] = React.useState("");
+  const [size, setSize] = React.useState("");
   const [defaultPrice, setDefaultPrice] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const structured = category === "Ceviche" || category === "Caldosa";
+  const productName = structured ? [category, subcategory.trim(), normalizeProductSize(size)].filter(Boolean).join(" ") : name.trim();
 
   async function handleCreate() {
-    if (!name.trim() || !defaultPrice) {
+    if (!productName || !defaultPrice) {
       return;
     }
 
     setSaving(true);
     try {
-      await onCreate({ name, kind: "sell", category, defaultPrice: Number(defaultPrice), active: true });
+      await onCreate({
+        name: productName,
+        kind: "sell",
+        category,
+        subcategory: structured ? subcategory.trim() : undefined,
+        size: structured ? normalizeProductSize(size) : undefined,
+        defaultPrice: Number(defaultPrice),
+        active: true
+      });
       setName("");
+      setSubcategory("");
+      setSize("");
       setDefaultPrice("");
     } finally {
       setSaving(false);
@@ -1471,11 +1687,20 @@ function NewProductForm({ onCreate }: { onCreate: (payload: Record<string, unkno
 
   return (
     <div className="space-y-3 rounded-2xl border bg-muted/30 p-3">
-      <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del producto" />
+      <Input
+        value={structured ? productName : name}
+        onChange={(event) => setName(event.target.value)}
+        disabled={structured}
+        placeholder={structured ? "Se crea automatico" : "Nombre del producto"}
+      />
       <div className="grid grid-cols-2 gap-2">
         <select
           value={category}
-          onChange={(event) => setCategory(event.target.value as IncomeCategory)}
+          onChange={(event) => {
+            setCategory(event.target.value as IncomeCategory);
+            setSubcategory("");
+            setSize("");
+          }}
           className="h-12 rounded-2xl border bg-background px-4 outline-none focus:ring-2 focus:ring-ring"
         >
           {INCOME_CATEGORIES.map((item) => (
@@ -1492,14 +1717,50 @@ function NewProductForm({ onCreate }: { onCreate: (payload: Record<string, unkno
           placeholder="Precio"
         />
       </div>
+      {structured ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Input
+            value={subcategory}
+            onChange={(event) => setSubcategory(event.target.value)}
+            list={`quick-subcategories-${category}`}
+            placeholder="Subtipo"
+          />
+          <datalist id={`quick-subcategories-${category}`}>
+            {productOptionValues(products, category, "subcategory").map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
+          <Input
+            value={size}
+            onChange={(event) => setSize(event.target.value)}
+            list={`quick-sizes-${category}`}
+            placeholder="Tamaño"
+          />
+          <datalist id={`quick-sizes-${category}`}>
+            {productOptionValues(products, category, "size").map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
+        </div>
+      ) : null}
       <Button
         type="button"
         className="w-full"
-        disabled={saving || !name.trim() || !defaultPrice}
+        disabled={saving || !productName || (structured && (!subcategory.trim() || !size.trim())) || !defaultPrice}
         onClick={handleCreate}
       >
         {saving ? "Agregando..." : "Guardar producto"}
       </Button>
     </div>
   );
+}
+
+function productOptionValues(products: Product[], category: IncomeCategory, field: "subcategory" | "size") {
+  return Array.from(
+    new Set(
+      products
+        .filter((product) => product.category === category && product[field])
+        .map((product) => String(product[field]))
+    )
+  ).sort((a, b) => (field === "size" ? compareProductSize(a, b) : a.localeCompare(b)));
 }

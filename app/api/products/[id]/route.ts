@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { AuthRequiredError, requireAuth } from "@/lib/auth";
 import { getCollections } from "@/lib/collections";
+import type { Product } from "@/lib/finance-types";
 import { productSchema } from "@/lib/validators";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,14 +17,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const { products } = await getCollections();
+    const existing = await products.findOne({ _id: new ObjectId(id), deletedAt: { $exists: false } });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
+    }
+
+    const usesStructuredOptions =
+      payload.kind === "sell" && (payload.category === "Ceviche" || payload.category === "Caldosa");
+    const subcategory = usesStructuredOptions ? payload.subcategory ?? existing.subcategory : undefined;
+    const size = usesStructuredOptions ? payload.size ?? existing.size : undefined;
+
     await products.updateOne(
       { _id: new ObjectId(id), deletedAt: { $exists: false } },
       {
         $set: {
           ...payload,
-          category: payload.category as never,
+          category: payload.category as Product["category"],
+          ...(subcategory ? { subcategory } : {}),
+          ...(size ? { size } : {}),
           updatedAt: new Date()
-        }
+        },
+        ...(!usesStructuredOptions ? { $unset: { subcategory: "", size: "" } } : {})
       }
     );
     const product = await products.findOne({ _id: new ObjectId(id), deletedAt: { $exists: false } });

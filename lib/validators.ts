@@ -17,6 +17,8 @@ export const productSchema = z
     name: z.string().trim().min(1).max(80),
     kind: z.enum(PRODUCT_KINDS).default("sell"),
     category: z.string().trim().min(1).max(80),
+    subcategory: z.string().trim().max(40).optional().or(z.literal("")),
+    size: z.string().trim().max(20).optional().or(z.literal("")),
     defaultPrice: z.coerce.number().min(0).max(10_000_000),
     active: z.boolean().default(true)
   })
@@ -45,7 +47,9 @@ export const productSchema = z
   })
   .transform((product) => ({
     ...product,
-    category: normalizeProductCategory(product.kind, product.category)
+    category: normalizeProductCategory(product.kind, product.category),
+    subcategory: product.kind === "sell" && product.subcategory ? product.subcategory : undefined,
+    size: product.kind === "sell" && product.size ? product.size : undefined
   }));
 
 export const providerSchema = z.object({

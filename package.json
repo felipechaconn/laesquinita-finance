@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "auth:bootstrap": "node scripts/bootstrap-auth-user.mjs"
+    "auth:bootstrap": "node scripts/bootstrap-auth-user.mjs",
+    "products:backfill-options": "node scripts/backfill-product-options.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -15,6 +16,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "exceljs": "^3.4.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.555.0",
     "mongodb": "^7.2.0",
@@ -25,7 +27,6 @@
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
-    "exceljs": "^4.4.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {

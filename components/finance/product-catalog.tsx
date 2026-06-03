@@ -30,6 +30,8 @@ type ProductDraft = {
   name: string;
   kind: ProductKind;
   category: IncomeCategory | ExpenseCategory;
+  subcategory: string;
+  size: string;
   defaultPrice: string;
   active: boolean;
 };
@@ -38,6 +40,8 @@ const defaultDraft: ProductDraft = {
   name: "",
   kind: "sell",
   category: "Ceviche",
+  subcategory: "",
+  size: "",
   defaultPrice: "",
   active: true
 };
@@ -61,19 +65,19 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
     setDraft({
       ...draft,
       kind: nextKind,
-      category: categoriesFor(nextKind)[0]
+      category: categoriesFor(nextKind)[0],
+      subcategory: "",
+      size: ""
     });
   }
 
   async function handleCreate() {
-    if (!draft.name.trim()) return;
+    const payload = buildProductPayload(draft);
+    if (!payload.name) return;
 
     setSaving(true);
     try {
-      await onCreate({
-        ...draft,
-        defaultPrice: Number(draft.defaultPrice || 0)
-      });
+      await onCreate(payload);
       setDraft({ ...defaultDraft, kind, category: categoriesFor(kind)[0] });
     } finally {
       setSaving(false);
@@ -87,20 +91,21 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
       name: product.name,
       kind: productKind,
       category: product.category,
+      subcategory: product.subcategory ?? "",
+      size: product.size ?? "",
       defaultPrice: String(product.defaultPrice),
       active: product.active
     });
   }
 
   async function saveEdit(id: string) {
-    if (!editDraft?.name.trim()) return;
+    if (!editDraft) return;
+    const payload = buildProductPayload(editDraft);
+    if (!payload.name) return;
 
     setSaving(true);
     try {
-      await onUpdate(id, {
-        ...editDraft,
-        defaultPrice: Number(editDraft.defaultPrice || 0)
-      });
+      await onUpdate(id, payload);
       setEditingId(null);
       setEditDraft(null);
     } finally {
@@ -149,13 +154,14 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-2xl border bg-muted/30 p-3">
-          <div className="grid gap-2 md:grid-cols-[1.2fr_0.9fr_0.8fr_auto]">
+          <div className="grid gap-2 md:grid-cols-[1.2fr_0.9fr_0.9fr_0.8fr_auto]">
             <div className="space-y-1">
               <Label className="text-xs">Producto</Label>
               <Input
-                value={draft.name}
+                value={productDisplayName(draft)}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                placeholder={kind === "sell" ? "Ej: Ceviche mediano" : "Ej: Pescado entero"}
+                disabled={usesStructuredSellOptions(draft)}
+                placeholder={usesStructuredSellOptions(draft) ? "Se crea automatico" : kind === "sell" ? "Ej: Refresco natural" : "Ej: Pescado entero"}
               />
             </div>
             <div className="space-y-1">
@@ -163,9 +169,10 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
               <CategorySelect
                 kind={draft.kind}
                 value={draft.category}
-                onChange={(category) => setDraft({ ...draft, category })}
+                onChange={(category) => setDraft({ ...draft, category, subcategory: "", size: "" })}
               />
             </div>
+            <StructuredProductOptions draft={draft} products={products} onChange={setDraft} />
             <div className="space-y-1">
               <Label className="text-xs">{kind === "sell" ? "Precio venta" : "Costo ref."}</Label>
               <Input
@@ -181,7 +188,7 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
                 type="button"
                 className="h-12 w-full md:w-12 md:p-0"
                 onClick={handleCreate}
-                disabled={saving || !draft.name.trim() || (kind === "sell" && !draft.defaultPrice)}
+                disabled={saving || !canSaveProductDraft(draft)}
                 aria-label="Agregar producto"
               >
                 <Plus className="h-5 w-5" />
@@ -204,17 +211,19 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
                   className="rounded-2xl border bg-background p-3"
                 >
                   {isEditing ? (
-                    <div className="grid gap-2 md:grid-cols-[1.2fr_0.9fr_0.8fr_auto]">
+                    <div className="grid gap-2 md:grid-cols-[1.2fr_0.9fr_0.9fr_0.8fr_auto]">
                       <Input
-                        value={editDraft.name}
+                        value={productDisplayName(editDraft)}
                         onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })}
+                        disabled={usesStructuredSellOptions(editDraft)}
                         placeholder="Nombre"
                       />
                       <CategorySelect
                         kind={editDraft.kind}
                         value={editDraft.category}
-                        onChange={(category) => setEditDraft({ ...editDraft, category })}
+                        onChange={(category) => setEditDraft({ ...editDraft, category, subcategory: "", size: "" })}
                       />
+                      <StructuredProductOptions draft={editDraft} products={products} onChange={setEditDraft} />
                       <Input
                         value={editDraft.defaultPrice}
                         onChange={(event) => setEditDraft({ ...editDraft, defaultPrice: event.target.value })}
@@ -258,7 +267,9 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
                           </Badge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {product.category} · {kind === "sell" ? "Precio" : "Costo ref."}{" "}
+                          {product.category}
+                          {product.subcategory ? ` · ${product.subcategory}` : ""}
+                          {product.size ? ` · ${product.size}` : ""} · {kind === "sell" ? "Precio" : "Costo ref."}{" "}
                           {formatCRC(product.defaultPrice)}
                         </p>
                       </div>
@@ -282,6 +293,114 @@ export function ProductCatalog({ products, onCreate, onUpdate, onDelete }: Produ
       </CardContent>
     </Card>
   );
+}
+
+function StructuredProductOptions({
+  draft,
+  products,
+  onChange
+}: {
+  draft: ProductDraft;
+  products: Product[];
+  onChange: (draft: ProductDraft) => void;
+}) {
+  if (!usesStructuredSellOptions(draft)) {
+    return null;
+  }
+
+  const subcategories = optionValues(products, draft.category, "subcategory");
+  const sizes = optionValues(products, draft.category, "size");
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <div className="space-y-1">
+        <Label className="text-xs">Subtipo</Label>
+        <Input
+          value={draft.subcategory}
+          onChange={(event) => onChange({ ...draft, subcategory: event.target.value })}
+          list={`subcategories-${draft.category}`}
+          placeholder="Ej: Normal"
+        />
+        <datalist id={`subcategories-${draft.category}`}>
+          {subcategories.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Tamaño</Label>
+        <Input
+          value={draft.size}
+          onChange={(event) => onChange({ ...draft, size: event.target.value })}
+          list={`sizes-${draft.category}`}
+          placeholder="Ej: 9oz"
+        />
+        <datalist id={`sizes-${draft.category}`}>
+          {sizes.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
+      </div>
+    </div>
+  );
+}
+
+function usesStructuredSellOptions(draft: ProductDraft) {
+  return draft.kind === "sell" && (draft.category === "Ceviche" || draft.category === "Caldosa");
+}
+
+function productDisplayName(draft: ProductDraft) {
+  if (!usesStructuredSellOptions(draft)) return draft.name;
+  return structuredProductName(draft);
+}
+
+function structuredProductName(draft: ProductDraft) {
+  return [draft.category, draft.subcategory.trim(), normalizeProductSize(draft.size)].filter(Boolean).join(" ");
+}
+
+function canSaveProductDraft(draft: ProductDraft) {
+  const hasName = usesStructuredSellOptions(draft)
+    ? Boolean(draft.subcategory.trim() && draft.size.trim())
+    : Boolean(draft.name.trim());
+
+  return hasName && (draft.kind !== "sell" || Boolean(draft.defaultPrice));
+}
+
+function buildProductPayload(draft: ProductDraft) {
+  const structured = usesStructuredSellOptions(draft);
+  const subcategory = draft.subcategory.trim();
+  const size = normalizeProductSize(draft.size);
+  const name = structured ? structuredProductName(draft) : draft.name.trim();
+
+  return {
+    ...draft,
+    name,
+    subcategory: structured ? subcategory : undefined,
+    size: structured ? size : undefined,
+    defaultPrice: Number(draft.defaultPrice || 0)
+  };
+}
+
+function optionValues(products: Product[], category: IncomeCategory | ExpenseCategory, field: "subcategory" | "size") {
+  return Array.from(
+    new Set(
+      products
+        .filter((product) => product.kind !== "buy" && product.category === category && product[field])
+        .map((product) => String(product[field]))
+    )
+  ).sort((a, b) => (field === "size" ? compareProductSize(a, b) : a.localeCompare(b)));
+}
+
+function normalizeProductSize(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\s*o?z$/i);
+  return match ? `${match[1]}oz` : value.trim();
+}
+
+function compareProductSize(a: string, b: string) {
+  const aNumber = Number(a.match(/\d+/)?.[0] ?? 0);
+  const bNumber = Number(b.match(/\d+/)?.[0] ?? 0);
+
+  return aNumber - bNumber || a.localeCompare(b);
 }
 
 function CategorySelect({

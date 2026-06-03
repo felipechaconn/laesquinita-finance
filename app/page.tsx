@@ -1,5 +1,14 @@
-import { FinanceDashboard } from "@/components/finance/finance-dashboard";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+import { FinanceDashboard } from "@/components/finance/finance-dashboard";
+import { getCurrentUser } from "@/lib/auth";
+
+export default async function Home() {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return <FinanceDashboard />;
 }

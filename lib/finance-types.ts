@@ -33,6 +33,8 @@ export type Product = {
   name: string;
   kind?: ProductKind;
   category: IncomeCategory | ExpenseCategory;
+  subcategory?: string;
+  size?: string;
   defaultPrice: number;
   active: boolean;
   createdAt: Date | string;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { AuthRequiredError, requireAuth } from "@/lib/auth";
 import { getCollections } from "@/lib/collections";
+import type { Product } from "@/lib/finance-types";
 import { seedProductsIfNeeded } from "@/lib/seed-products";
 import { productSchema } from "@/lib/validators";
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const result = await products.insertOne({
       ...payload,
-      category: payload.category as never,
+      category: payload.category as Product["category"],
       createdAt: now,
       updatedAt: now
     });
