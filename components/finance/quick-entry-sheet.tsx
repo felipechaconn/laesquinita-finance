@@ -201,6 +201,7 @@ function OrderForm({
   onUpdateProduct: (id: string, payload: Record<string, unknown>) => Promise<Product>;
 }) {
   const [paymentMethod, setPaymentMethod] = React.useState<PaymentMethod>("SINPE");
+  const [cashReceived, setCashReceived] = React.useState("");
   const [selectedDate, setSelectedDate] = React.useState(todayDateInputValue);
   const [items, setItems] = React.useState<DraftItem[]>([]);
   const [note, setNote] = React.useState("");
@@ -359,6 +360,7 @@ function OrderForm({
     });
     setItems([]);
     setNote("");
+    setCashReceived("");
   }
 
   const sellProducts = products.filter((product) => (product.kind ?? "sell") === "sell" && product.active);
@@ -479,7 +481,18 @@ function OrderForm({
       ) : null}
 
       <ExtrasPicker items={items} onChangeExtra={changeExtra} />
-      <PaymentPicker value={paymentMethod} onChange={setPaymentMethod} />
+      <PaymentPicker
+        value={paymentMethod}
+        onChange={(method) => {
+          setPaymentMethod(method);
+          if (method !== "Efectivo") {
+            setCashReceived("");
+          }
+        }}
+      />
+      {paymentMethod === "Efectivo" ? (
+        <CashChangeCalculator total={total} cashReceived={cashReceived} onCashReceivedChange={setCashReceived} />
+      ) : null}
 
       <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Nota opcional" />
       <Button type="submit" size="lg" className="w-full" disabled={!items.length || isMutating}>
@@ -1604,6 +1617,47 @@ function PaymentPicker({ value, onChange }: { value: PaymentMethod; onChange: (v
           </Button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CashChangeCalculator({
+  total,
+  cashReceived,
+  onCashReceivedChange
+}: {
+  total: number;
+  cashReceived: string;
+  onCashReceivedChange: (value: string) => void;
+}) {
+  const paid = Number(cashReceived || 0);
+  const change = paid - total;
+  const hasPayment = cashReceived.trim().length > 0;
+
+  return (
+    <div className="space-y-3 rounded-2xl border bg-emerald-500/8 p-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="space-y-2">
+          <Label>Pago con efectivo</Label>
+          <Input
+            value={cashReceived}
+            onChange={(event) => onCashReceivedChange(event.target.value)}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Ej: 5000"
+            className="h-14 text-2xl font-bold"
+          />
+        </div>
+        <div className="rounded-2xl bg-background px-4 py-3 text-right">
+          <p className="text-xs text-muted-foreground">{change >= 0 ? "Vuelto" : "Falta"}</p>
+          <p className={`text-2xl font-bold ${change >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+            {hasPayment ? formatCRC(Math.abs(change)) : formatCRC(0)}
+          </p>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Total de la orden: <span className="font-semibold text-foreground">{formatCRC(total)}</span>
+      </p>
     </div>
   );
 }
