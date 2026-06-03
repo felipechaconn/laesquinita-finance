@@ -5,7 +5,6 @@ import Image from "next/image";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CalendarDays,
   Download,
   LogOut,
   Moon,
@@ -29,6 +28,7 @@ import { RecentTransactions } from "@/components/finance/recent-transactions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useFinanceDashboard } from "@/hooks/use-finance-dashboard";
+import type { RangeKey } from "@/lib/finance-types";
 import { cn, formatCRC } from "@/lib/utils";
 
 export function FinanceDashboard() {
@@ -60,6 +60,9 @@ export function FinanceDashboard() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
+
+  const periodLabel = summary ? metricPeriodLabel(summary.range.key) : "";
+  const healthLabel = summary ? healthPeriodLabel(summary.range.key) : "";
 
   return (
     <main className="min-h-screen px-4 py-4 pb-28 sm:px-6 lg:px-8">
@@ -131,13 +134,13 @@ export function FinanceDashboard() {
         ) : (
           <>
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <MetricCard title="Ingresos hoy" value={summary.topCards.todayIncome} icon={ArrowUpRight} tone="income" />
-              <MetricCard title="Gastos hoy" value={summary.topCards.todayExpenses} icon={ArrowDownLeft} tone="expense" />
-              <MetricCard title="Utilidad hoy" value={summary.topCards.todayProfit} icon={TrendingUp} tone="profit" />
+              <MetricCard title={`Ingresos ${periodLabel}`} value={summary.totals.income} icon={ArrowUpRight} tone="income" />
+              <MetricCard title={`Gastos ${periodLabel}`} value={summary.totals.expenses} icon={ArrowDownLeft} tone="expense" />
+              <MetricCard title={`Utilidad ${periodLabel}`} value={summary.totals.profit} icon={TrendingUp} tone="profit" />
               <MetricCard
-                title="Utilidad del mes"
-                value={summary.topCards.monthProfit}
-                icon={CalendarDays}
+                title={`Ticket promedio ${periodLabel}`}
+                value={summary.totals.averageTicket}
+                icon={WalletCards}
                 tone="profit"
                 compact
               />
@@ -148,7 +151,7 @@ export function FinanceDashboard() {
               animate={{ opacity: 1, y: 0 }}
               className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr]"
             >
-              <HealthStat label="Ventas del rango" value={formatCRC(summary.totals.income)} />
+              <HealthStat label={`Ventas ${healthLabel}`} value={formatCRC(summary.totals.income)} />
               <HealthStat label="Ordenes" value={String(summary.totals.orders)} />
               <HealthStat
                 label="Margen de utilidad"
@@ -192,6 +195,20 @@ export function FinanceDashboard() {
       />
     </main>
   );
+}
+
+function metricPeriodLabel(range: RangeKey) {
+  if (range === "week") return "semana";
+  if (range === "month") return "mes";
+  if (range === "custom") return "del rango";
+  return "del dia";
+}
+
+function healthPeriodLabel(range: RangeKey) {
+  if (range === "week") return "de la semana";
+  if (range === "month") return "del mes";
+  if (range === "custom") return "del rango";
+  return "del dia";
 }
 
 function HealthStat({
