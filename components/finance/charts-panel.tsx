@@ -29,6 +29,9 @@ type ChartsPanelProps = {
 export function ChartsPanel({ summary }: ChartsPanelProps) {
   const hasSeries = summary.series.some((item) => item.income > 0 || item.expenses > 0);
   const hasExpenses = summary.expenseCategories.length > 0;
+  const hasAnalysis = summary.analysisSeries.some((item) => item.income > 0 || item.expenses > 0);
+  const incomeTitle = incomeAnalysisTitle(summary.range.key);
+  const analysisDescription = analysisDescriptionFor(summary.range.analysisGrain);
 
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
@@ -113,22 +116,24 @@ export function ChartsPanel({ summary }: ChartsPanelProps) {
 
       <Card className="min-w-0 overflow-hidden xl:col-span-2">
         <CardHeader>
-          <CardTitle>Utilidad semanal</CardTitle>
-          <CardDescription>Vista rapida de rentabilidad por semana.</CardDescription>
+          <CardTitle>{incomeTitle}</CardTitle>
+          <CardDescription>{analysisDescription}</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
           <ChartFrame className="h-64 min-h-64">
             {({ width, height }) =>
-              summary.weeklyProfit.length ? (
-                <BarChart width={width} height={height} data={summary.weeklyProfit} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
+              hasAnalysis ? (
+                <BarChart width={width} height={height} data={summary.analysisSeries} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.12} />
-                  <XAxis dataKey="week" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                   <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12 }} tickFormatter={formatCompactCRC} />
                   <Tooltip formatter={(value) => formatCRC(Number(value))} />
-                  <Bar dataKey="profit" name="Utilidad" radius={[10, 10, 4, 4]} fill="#0284c7" />
+                  <Bar dataKey="income" name="Ingresos" radius={[8, 8, 2, 2]} fill="#16a34a" />
+                  <Bar dataKey="expenses" name="Gastos" radius={[8, 8, 2, 2]} fill="#ef4444" />
+                  <Bar dataKey="profit" name="Utilidad" radius={[8, 8, 2, 2]} fill="#0284c7" />
                 </BarChart>
               ) : (
-                <EmptyChart title="La utilidad semanal aparecera al registrar movimientos." />
+                <EmptyChart title="El analisis aparecera al registrar movimientos." />
               )
             }
           </ChartFrame>
@@ -136,6 +141,19 @@ export function ChartsPanel({ summary }: ChartsPanelProps) {
       </Card>
     </div>
   );
+}
+
+function incomeAnalysisTitle(range: DashboardSummary["range"]["key"]) {
+  if (range === "week") return "Ingresos semana";
+  if (range === "month") return "Ingresos mes";
+  if (range === "custom") return "Ingresos del rango";
+  return "Ingresos del dia";
+}
+
+function analysisDescriptionFor(grain: DashboardSummary["range"]["analysisGrain"]) {
+  if (grain === "month") return "Comparacion mensual de ingresos, gastos y utilidad.";
+  if (grain === "week") return "Comparacion semanal de ingresos, gastos y utilidad.";
+  return "Comparacion diaria de ingresos, gastos y utilidad.";
 }
 
 function ChartFrame({

@@ -3,6 +3,7 @@
 import type { RangeKey } from "@/lib/finance-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { selectedRangeStartValue } from "@/lib/date-ranges";
 import { cn } from "@/lib/utils";
 
 type RangeFilterProps = {
@@ -11,13 +12,24 @@ type RangeFilterProps = {
 };
 
 const options: Array<{ label: string; value: RangeKey }> = [
-  { label: "Hoy", value: "today" },
+  { label: "Dia", value: "today" },
   { label: "Semana", value: "week" },
   { label: "Mes", value: "month" },
   { label: "Rango", value: "custom" }
 ];
 
 export function RangeFilter({ value, onChange }: RangeFilterProps) {
+  const startValue = selectedRangeStartValue(value.range, value.start);
+
+  function handleRangeChange(range: RangeKey) {
+    if (range === "custom") {
+      onChange({ range, start: value.start, end: value.end ?? value.start });
+      return;
+    }
+
+    onChange({ range, start: selectedRangeStartValue(range, value.start) });
+  }
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="grid grid-cols-4 rounded-2xl bg-secondary p-1">
@@ -31,7 +43,7 @@ export function RangeFilter({ value, onChange }: RangeFilterProps) {
               "h-10 rounded-xl px-2 text-xs sm:text-sm",
               value.range === option.value && "bg-card shadow-sm hover:bg-card"
             )}
-            onClick={() => onChange({ ...value, range: option.value })}
+            onClick={() => handleRangeChange(option.value)}
           >
             {option.label}
           </Button>
@@ -53,7 +65,16 @@ export function RangeFilter({ value, onChange }: RangeFilterProps) {
             className="h-10 rounded-xl text-sm"
           />
         </div>
-      ) : null}
+      ) : (
+        <div className="sm:w-48">
+          <Input
+            type={value.range === "week" ? "week" : value.range === "month" ? "month" : "date"}
+            value={startValue}
+            onChange={(event) => onChange({ range: value.range, start: event.target.value })}
+            className="h-10 rounded-xl text-sm"
+          />
+        </div>
+      )}
     </div>
   );
 }

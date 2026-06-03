@@ -39,14 +39,17 @@ export function getRange(range: RangeKey, start?: string | null, end?: string | 
   }
 
   if (range === "week") {
-    return { start: startOfWeek(now), end: endOfDay(now) };
+    const weekStart = startOfSelectedWeek(start, now);
+    return { start: weekStart, end: endOfDay(addDays(weekStart, 6)) };
   }
 
   if (range === "month") {
-    return { start: startOfMonth(now), end: endOfDay(now) };
+    const monthStart = startOfSelectedMonth(start, now);
+    return { start: monthStart, end: endOfMonth(monthStart) };
   }
 
-  return { start: startOfDay(now), end: endOfDay(now) };
+  const day = isDateKey(start) ? start : now;
+  return { start: startOfDay(day), end: endOfDay(day) };
 }
 
 export function dateKey(date: Date) {
@@ -58,6 +61,26 @@ export function addDaysToDateKey(key: string, days: number) {
   const [year, month, day] = parseDateKey(key);
   const date = new Date(Date.UTC(year, month - 1, day) + days * DAY_MS);
   return formatDateKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+}
+
+export function htmlWeekValue(date: Date | string = new Date()) {
+  const start = startOfWeek(date);
+  const [year] = parseDateKey(dateKey(start));
+  const yearStart = startOfWeek(formatDateKey(year, 1, 4));
+  const week = Math.floor((start.getTime() - yearStart.getTime()) / (7 * DAY_MS)) + 1;
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+export function htmlMonthValue(date: Date | string = new Date()) {
+  return dateKey(startOfMonth(date)).slice(0, 7);
+}
+
+export function selectedRangeStartValue(range: RangeKey, start?: string | null) {
+  if (range === "week" && /^\d{4}-W\d{2}$/.test(start ?? "")) return start ?? "";
+  if (range === "month" && /^\d{4}-\d{2}$/.test(start ?? "")) return start ?? "";
+  if (range === "week") return htmlWeekValue(start ?? new Date());
+  if (range === "month") return htmlMonthValue(start ?? new Date());
+  return isDateKey(start) ? start : dateKey(new Date());
 }
 
 function dateKeyToUtcBoundary(key: string, boundary: "start" | "end") {
@@ -82,4 +105,41 @@ function parseDateKey(key: string) {
 
 function formatDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function startOfSelectedWeek(value: string | null | undefined, fallback: Date) {
+  const htmlWeekMatch = /^(\d{4})-W(\d{2})$/.exec(value ?? "");
+
+  if (htmlWeekMatch) {
+    const year = Number(htmlWeekMatch[1]);
+    const week = Number(htmlWeekMatch[2]);
+    const firstWeekStart = startOfWeek(formatDateKey(year, 1, 4));
+    return startOfDay(addDays(firstWeekStart, (week - 1) * 7));
+  }
+
+  return startOfWeek(isDateKey(value) ? value : fallback);
+}
+
+function startOfSelectedMonth(value: string | null | undefined, fallback: Date) {
+  const htmlMonthMatch = /^(\d{4})-(\d{2})$/.exec(value ?? "");
+
+  if (htmlMonthMatch) {
+    return startOfDay(formatDateKey(Number(htmlMonthMatch[1]), Number(htmlMonthMatch[2]), 1));
+  }
+
+  return startOfMonth(isDateKey(value) ? value : fallback);
+}
+
+function endOfMonth(date: Date) {
+  const [year, month] = parseDateKey(dateKey(date));
+  const nextMonth = month === 12 ? formatDateKey(year + 1, 1, 1) : formatDateKey(year, month + 1, 1);
+  return endOfDay(addDays(startOfDay(nextMonth), -1));
+}
+
+function isDateKey(value: string | null | undefined): value is string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "");
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * DAY_MS);
 }

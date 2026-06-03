@@ -70,12 +70,14 @@ export async function getDashboardSummary(input: RangeInput): Promise<DashboardS
   const selectedExpenseTotal = sumExpenses(selectedExpenses);
   const profit = selectedIncome - selectedExpenseTotal;
   const margin = selectedIncome > 0 ? (profit / selectedIncome) * 100 : 0;
+  const analysisGrain = analysisGrainForRange(input.range, selected.start, selected.end);
 
   const todayIncome = sumOrders(todayOrders);
   const todayExpenseTotal = sumExpenses(todayExpenses);
   const monthProfit = sumOrders(monthOrders) - sumExpenses(monthExpenses);
 
   const series = buildSeries(selected.start, selected.end, selectedOrders, selectedExpenses);
+  const analysisSeries = buildAnalysisSeries(analysisGrain, selected.start, selected.end, selectedOrders, selectedExpenses);
   const expenseCategories = buildExpenseCategories(selectedExpenses);
   const weeklyProfit = buildWeeklyProfit(selectedOrders, selectedExpenses);
   const topProducts = buildTopProducts(selectedOrders);
@@ -93,7 +95,9 @@ export async function getDashboardSummary(input: RangeInput): Promise<DashboardS
   return {
     range: {
       start: dateKey(selected.start),
-      end: dateKey(selected.end)
+      end: dateKey(selected.end),
+      key: input.range,
+      analysisGrain
     },
     topCards: {
       todayIncome,
@@ -110,6 +114,7 @@ export async function getDashboardSummary(input: RangeInput): Promise<DashboardS
       averageTicket: selectedOrders.length ? selectedIncome / selectedOrders.length : 0
     },
     series,
+    analysisSeries,
     expenseCategories,
     weeklyProfit,
     topProducts,
@@ -158,6 +163,39 @@ function buildSeries(start: Date, end: Date, orders: Order[], expenses: Expense[
   });
 
   return Array.from(map.values());
+}
+
+function buildAnalysisSeries(
+  grain: "day" | "week" | "month",
+  start: Date,
+  end: Date,
+  orders: Order[],
+  expenses: Expense[]
+) {
+  const map = new Map<string, { label: string; income: number; expenses: number; profit: number }>();
+
+  for (let cursor = startOfDay(start); cursor <= end; cursor = nextAnalysisDate(cursor, grain)) {
+    const key = analysisKey(cursor, grain);
+    map.set(key, { label: analysisLabel(cursor, grain), income: 0, expenses: 0, profit: 0 });
+  }
+
+  orders.forEach((order) => {
+    const key = analysisKey(new Date(order.createdAt), grain);
+    const row = map.get(key) ?? { label: analysisLabel(new Date(order.createdAt), grain), income: 0, expenses: 0, profit: 0 };
+    row.income += order.totalAmount;
+    row.profit = row.income - row.expenses;
+    map.set(key, row);
+  });
+
+  expenses.forEach((expense) => {
+    const key = analysisKey(new Date(expense.createdAt), grain);
+    const row = map.get(key) ?? { label: analysisLabel(new Date(expense.createdAt), grain), income: 0, expenses: 0, profit: 0 };
+    row.expenses += expense.amount;
+    row.profit = row.income - row.expenses;
+    map.set(key, row);
+  });
+
+  return Array.from(map.values()).filter((row) => row.income > 0 || row.expenses > 0 || map.size <= 12);
 }
 
 function buildExpenseCategories(expenses: Expense[]) {
@@ -319,6 +357,46 @@ function weekLabel(date: Date) {
   const start = startOfWeek(date);
   const [, month, day] = dateKey(start).split("-");
   return `${Number(day)}/${Number(month)}`;
+}
+
+function analysisGrainForRange(range: RangeKey, start: Date, end: Date): "day" | "week" | "month" {
+  if (range === "month") return "week";
+
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)));
+
+  if (range === "custom" && days > 120) return "month";
+  if (range === "custom" && days > 31) return "week";
+  return "day";
+}
+
+function analysisKey(date: Date, grain: "day" | "week" | "month") {
+  if (grain === "month") return dateKey(startOfMonth(date)).slice(0, 7);
+  if (grain === "week") return dateKey(startOfWeek(date));
+  return dateKey(date);
+}
+
+function analysisLabel(date: Date, grain: "day" | "week" | "month") {
+  const key = dateKey(grain === "month" ? startOfMonth(date) : grain === "week" ? startOfWeek(date) : date);
+  const [, month, day] = key.split("-");
+
+  if (grain === "month") {
+    return new Intl.DateTimeFormat("es-CR", { timeZone: "America/Costa_Rica", month: "short", year: "2-digit" }).format(date);
+  }
+
+  if (grain === "week") {
+    return `Sem ${Number(day)}/${Number(month)}`;
+  }
+
+  return `${Number(day)}/${Number(month)}`;
+}
+
+function nextAnalysisDate(date: Date, grain: "day" | "week" | "month") {
+  if (grain === "month") {
+    const [year, month] = dateKey(date).split("-").map(Number);
+    return startOfMonth(month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`);
+  }
+
+  return addDays(date, grain === "week" ? 7 : 1);
 }
 
 function addDays(date: Date, days: number) {

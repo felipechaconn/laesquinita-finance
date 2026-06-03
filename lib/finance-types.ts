@@ -108,6 +108,8 @@ export type DashboardSummary = {
   range: {
     start: string;
     end: string;
+    key: RangeKey;
+    analysisGrain: "day" | "week" | "month";
   };
   topCards: {
     todayIncome: number;
@@ -124,6 +126,7 @@ export type DashboardSummary = {
     averageTicket: number;
   };
   series: Array<{ date: string; income: number; expenses: number; profit: number }>;
+  analysisSeries: Array<{ label: string; income: number; expenses: number; profit: number }>;
   expenseCategories: Array<{ category: ExpenseCategory; amount: number }>;
   weeklyProfit: Array<{ week: string; profit: number }>;
   topProducts: Array<{ productName: string; category: IncomeCategory; quantity: number; revenue: number }>;
