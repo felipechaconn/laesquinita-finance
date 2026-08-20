@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { AuthRequiredError, requireAuth } from "@/lib/auth";
+import { AuthForbiddenError, AuthRequiredError, requireAdminRole, requireAuth } from "@/lib/auth";
 import { getCollections } from "@/lib/collections";
 import type { Product } from "@/lib/finance-types";
 import { seedProductsIfNeeded } from "@/lib/seed-products";
@@ -26,7 +26,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    requireAdminRole(user);
     const payload = productSchema.parse(await request.json());
     const { products } = await getCollections();
     const now = new Date();
@@ -47,6 +48,10 @@ export async function POST(request: Request) {
 function handleError(error: unknown) {
   if (error instanceof AuthRequiredError) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  if (error instanceof AuthForbiddenError) {
+    return NextResponse.json({ error: error.message }, { status: 403 });
   }
 
   const message = error instanceof Error ? error.message : "No se pudo procesar la solicitud.";

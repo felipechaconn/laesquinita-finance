@@ -34,7 +34,8 @@ export function LoginForm() {
 
       toast.success("Sesion iniciada");
       const nextPath = searchParams.get("next");
-      window.location.href = nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
+      const defaultPath = data.user?.role === "contractor" ? "/ventas" : "/";
+      window.location.href = nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : defaultPath;
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo iniciar sesion.";
       toast.error(message);

@@ -129,10 +129,31 @@ export async function requireAuth() {
   return user;
 }
 
+export function isContractor(user: PublicUser) {
+  return user.role === "contractor";
+}
+
+export function canAccessAdmin(user: PublicUser) {
+  return user.role === "owner" || user.role === "staff";
+}
+
+export function requireAdminRole(user: PublicUser) {
+  if (!canAccessAdmin(user)) {
+    throw new AuthForbiddenError();
+  }
+}
+
 export class AuthRequiredError extends Error {
   constructor() {
     super("Authentication required.");
     this.name = "AuthRequiredError";
+  }
+}
+
+export class AuthForbiddenError extends Error {
+  constructor(message = "No tienes permiso para realizar esta accion.") {
+    super(message);
+    this.name = "AuthForbiddenError";
   }
 }
 

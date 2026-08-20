@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { AuthRequiredError, requireAuth } from "@/lib/auth";
+import { AuthForbiddenError, AuthRequiredError, requireAdminRole, requireAuth } from "@/lib/auth";
 import { dateKey } from "@/lib/date-ranges";
 import { REPORT_TYPES, type ReportType } from "@/lib/finance-types";
 import { getDailyReport } from "@/lib/reports";
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    requireAdminRole(user);
     const { searchParams } = new URL(request.url);
     const date = searchParams.get("date") ?? dateKey(new Date());
     const type = searchParams.get("type") as ReportType | null;
@@ -17,6 +18,10 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    if (error instanceof AuthForbiddenError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
     const message = error instanceof Error ? error.message : "No se pudo cargar el reporte.";

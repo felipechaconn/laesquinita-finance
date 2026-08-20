@@ -73,7 +73,10 @@ export type Order = {
   totalAmount: number;
   note?: string;
   createdAt: Date | string;
+  createdBy?: string;
+  createdByName?: string;
   updatedAt?: Date | string;
+  updatedBy?: string;
   deletedAt?: Date | string;
   deletedBy?: string;
   voidReason?: string;

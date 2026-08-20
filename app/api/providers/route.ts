@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { AuthRequiredError, requireAuth } from "@/lib/auth";
+import { AuthForbiddenError, AuthRequiredError, requireAdminRole, requireAuth } from "@/lib/auth";
 import { getCollections } from "@/lib/collections";
 import { normalizeProviderName, upsertProvider } from "@/lib/providers";
 import { providerSchema } from "@/lib/validators";
 
 export async function GET() {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    requireAdminRole(user);
     const { providers } = await getCollections();
     const data = await providers
       .find({ deletedAt: { $exists: false } })
@@ -22,7 +23,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    requireAdminRole(user);
     const payload = providerSchema.parse(await request.json());
     const { providers } = await getCollections();
     const provider = payload.active
@@ -42,6 +44,10 @@ export async function POST(request: Request) {
 function handleError(error: unknown) {
   if (error instanceof AuthRequiredError) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  if (error instanceof AuthForbiddenError) {
+    return NextResponse.json({ error: error.message }, { status: 403 });
   }
 
   const message = error instanceof Error ? error.message : "No se pudo procesar el proveedor.";

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { AuthRequiredError, requireAuth } from "@/lib/auth";
+import { AuthForbiddenError, AuthRequiredError, requireAdminRole, requireAuth } from "@/lib/auth";
 import { getDashboardSummary } from "@/lib/finance-analytics";
 import { RANGE_KEYS, type RangeKey } from "@/lib/finance-types";
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    requireAdminRole(user);
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") as RangeKey | null;
     const safeRange = range && RANGE_KEYS.includes(range) ? range : "today";
@@ -20,6 +21,10 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    if (error instanceof AuthForbiddenError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
     const message = error instanceof Error ? error.message : "No se pudo cargar el resumen.";

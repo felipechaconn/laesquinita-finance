@@ -43,6 +43,7 @@ async function ensureIndexes(db: Db) {
     db.collection("orders").createIndexes([
       { key: { orderNumber: 1 }, unique: true, name: "order_number_unique" },
       { key: { createdAt: -1 }, name: "orders_created_at" },
+      { key: { createdBy: 1, createdAt: -1 }, name: "orders_created_by_created" },
       { key: { paymentMethod: 1, createdAt: -1 }, name: "orders_payment_created" },
       { key: { "items.productId": 1 }, name: "orders_item_product" },
       { key: { deletedAt: 1 }, name: "orders_deleted_at" }

@@ -25,7 +25,7 @@ export function RecentTransactions({ transactions, onDelete, onUpdateOrder }: Re
     <Card>
       <CardHeader>
         <CardTitle>Movimientos recientes</CardTitle>
-        <CardDescription>Desliza mentalmente: aqui todo debe ser obvio en segundos.</CardDescription>
+        <CardDescription>Ventas y gastos mas recientes del periodo seleccionado.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {transactions.length ? (

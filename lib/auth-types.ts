@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 
-export type UserRole = "owner" | "staff";
+export type UserRole = "owner" | "staff" | "contractor";
 
 export type AuthUser = {
   _id?: ObjectId | string;

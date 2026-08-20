@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "auth:bootstrap": "node scripts/bootstrap-auth-user.mjs",
+    "auth:user": "node scripts/upsert-auth-user.mjs",
+    "security:smoke": "node scripts/security-smoke-tests.mjs",
     "products:backfill-options": "node scripts/backfill-product-options.mjs"
   },
   "dependencies": {
