@@ -187,6 +187,10 @@ export function MobileSalesEntry({ user }: { user: PublicUser }) {
     );
   }
 
+  function removeItem(productId: string) {
+    setItems((current) => current.filter((item) => item.productId !== productId));
+  }
+
   function changeExtra(extra: string, delta: number) {
     const id = extraProductId(extra);
 
@@ -310,7 +314,7 @@ export function MobileSalesEntry({ user }: { user: PublicUser }) {
   }
 
   return (
-    <main className="min-h-screen bg-background pb-64">
+    <main className="min-h-screen bg-background pb-96">
       <header className="sticky top-0 z-30 border-b bg-card/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           {isContractor ? (
@@ -573,43 +577,6 @@ export function MobileSalesEntry({ user }: { user: PublicUser }) {
         </section>
 
         <section className={cn("space-y-3", activeView !== "register" && "hidden")}>
-          <div className="flex items-center justify-between">
-            <Label>Productos elegidos</Label>
-            {items.length ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setItems([])}>
-                <Trash2 className="h-4 w-4" />
-                Limpiar
-              </Button>
-            ) : null}
-          </div>
-
-          {items.length ? (
-            <div className="space-y-2">
-              {items.map((item) => (
-                <div key={item.productId} className="grid grid-cols-[1fr_auto] gap-3 rounded-2xl border bg-card p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">{formatCRC(item.unitPrice)} c/u</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <QuantityControl
-                      quantity={item.quantity}
-                      onMinus={() => changeQuantity(item.productId, -1)}
-                      onPlus={() => changeQuantity(item.productId, 1)}
-                    />
-                    <Badge variant="success">{formatCRC(item.subtotal)}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed bg-card p-5 text-center text-sm text-muted-foreground">
-              Los productos que agregue apareceran aqui.
-            </div>
-          )}
-        </section>
-
-        <section className={cn("space-y-3", activeView !== "register" && "hidden")}>
           <Label>Extras</Label>
           <div className="grid gap-2 sm:grid-cols-3">
             {ORDER_EXTRAS.map((extra) => {
@@ -688,21 +655,61 @@ export function MobileSalesEntry({ user }: { user: PublicUser }) {
 
       {activeView === "register" ? (
         <div className="fixed inset-x-0 bottom-[5.75rem] z-40 px-4">
-          <div className="mx-auto flex max-w-4xl items-center gap-3 rounded-2xl border bg-card/95 p-3 shadow-2xl shadow-slate-900/10 backdrop-blur">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-muted-foreground">{itemCount} unidades</p>
-              <p className="truncate text-xl font-bold">{formatCRC(total)}</p>
-            </div>
-            <Button
-              type="button"
-              size="lg"
-              className="min-w-36 bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700"
-              disabled={!items.length || isSaving}
-              onClick={() => void submitOrder()}
-            >
-              <ShoppingCart className="h-5 w-5" />
-              {isSaving ? "Guardando" : editingOrder ? "Actualizar" : "Registrar"}
-            </Button>
+          <div className="mx-auto max-w-4xl rounded-2xl border bg-card/95 p-3 shadow-2xl shadow-slate-900/10 backdrop-blur">
+            {items.length ? (
+              <>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">Venta actual</p>
+                    <p className="truncate text-sm font-bold">{itemCount} unidades seleccionadas</p>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setItems([])}>
+                    <Trash2 className="h-4 w-4" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {items.map((item) => (
+                    <SelectedItemReviewRow
+                      key={item.productId}
+                      item={item}
+                      onMinus={() => changeQuantity(item.productId, -1)}
+                      onPlus={() => changeQuantity(item.productId, 1)}
+                      onRemove={() => removeItem(item.productId)}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-3 flex items-center gap-3 border-t pt-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">Total</p>
+                    <p className="truncate text-xl font-bold text-emerald-600">{formatCRC(total)}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="min-w-36 bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-700"
+                    disabled={isSaving}
+                    onClick={() => void submitOrder()}
+                  >
+                    <ShoppingCart className="h-5 w-5" />
+                    {isSaving ? "Guardando" : editingOrder ? "Actualizar" : "Registrar"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">Venta actual</p>
+                  <p className="truncate text-sm font-semibold">Agregue productos para registrar</p>
+                </div>
+                <Button type="button" size="lg" className="min-w-36" disabled>
+                  <ShoppingCart className="h-5 w-5" />
+                  Registrar
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
@@ -810,6 +817,36 @@ function ProductCatalogRow({ product, className }: { product: Product; className
         <p className="mt-1 text-xs text-muted-foreground">{product.category}</p>
       </div>
       <p className="shrink-0 text-sm font-bold text-emerald-600">{formatCRC(product.defaultPrice)}</p>
+    </div>
+  );
+}
+
+function SelectedItemReviewRow({
+  item,
+  onMinus,
+  onPlus,
+  onRemove
+}: {
+  item: DraftItem;
+  onMinus: () => void;
+  onPlus: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="rounded-xl border bg-background p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="line-clamp-2 text-sm font-bold leading-tight">{item.productName}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{formatCRC(item.unitPrice)} c/u</p>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={onRemove} aria-label="Quitar producto">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <QuantityControl quantity={item.quantity} onMinus={onMinus} onPlus={onPlus} />
+        <Badge variant="success">{formatCRC(item.subtotal)}</Badge>
+      </div>
     </div>
   );
 }

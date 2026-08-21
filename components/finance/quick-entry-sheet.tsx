@@ -502,10 +502,12 @@ function OrderForm({
   );
 }
 
-type GuidedCategory = "Ceviche" | "Caldosa" | "Otros";
+type GuidedCategory = "Ceviche" | "Caldosa" | "Todo a 1000" | "Otros";
 
 type GuidedStep = "category" | "subcategory" | "size" | "product";
 
+const GUIDED_CATEGORIES = ["Ceviche", "Caldosa", "Todo a 1000", "Otros"] as const;
+const DIRECT_PRODUCT_CATEGORIES: ReadonlySet<GuidedCategory> = new Set(["Todo a 1000", "Otros"]);
 const KNOWN_PRODUCT_SUBCATEGORIES = ["Normal", "Camaron", "Clasico", "Mixto", "Tropical"] as const;
 const PRODUCT_SUBCATEGORY_ALIASES: Record<(typeof KNOWN_PRODUCT_SUBCATEGORIES)[number], string[]> = {
   Normal: ["normal", "tradicional"],
@@ -533,7 +535,7 @@ function GuidedProductPicker({
   const step: GuidedStep =
     !category
       ? "category"
-      : category === "Otros"
+      : DIRECT_PRODUCT_CATEGORIES.has(category)
         ? "product"
         : !subcategory
           ? "subcategory"
@@ -559,7 +561,7 @@ function GuidedProductPicker({
       resetAll();
       return;
     }
-    if (category === "Otros") {
+    if (category && DIRECT_PRODUCT_CATEGORIES.has(category)) {
       resetAll();
       return;
     }
@@ -622,8 +624,8 @@ function GuidedProductPicker({
         ) : null}
 
         {step === "category" ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            {(["Ceviche", "Caldosa", "Otros"] as const).map((option) => (
+          <div className="grid gap-3 sm:grid-cols-4">
+            {GUIDED_CATEGORIES.map((option) => (
               <GuidedTile
                 key={option}
                 title={option}
@@ -670,7 +672,10 @@ function GuidedProductPicker({
 
         {step === "product" ? (
           <div className="space-y-4">
-            <SectionHeading title="Otros productos" detail="Elija el producto para agregar" />
+            <SectionHeading
+              title={category === "Todo a 1000" ? "Todo a 1000" : "Otros productos"}
+              detail="Elija el producto para agregar"
+            />
             <QuantityPicker quantity={quantity} onChange={setQuantity} />
             <ProductChoices
               products={suggestedProducts}
@@ -683,7 +688,7 @@ function GuidedProductPicker({
 
         {step === "size" ? (
           <div className="space-y-4">
-            {category !== "Otros" ? (
+            {category && !DIRECT_PRODUCT_CATEGORIES.has(category) ? (
               <div className="space-y-3">
                 <SectionHeading title={`Tamaño de ${displayProductSubcategory(subcategory, category)}`} detail="Toque el tamaño para agregar" />
                 <QuantityPicker quantity={quantity} onChange={setQuantity} />
@@ -890,7 +895,10 @@ function ProductChoiceCard({
 function findGuidedProducts(products: Product[], category: GuidedCategory | null, size: string, subcategory: string) {
   if (!category) return [];
   if (category === "Otros") {
-    return products.filter((product) => product.category !== "Ceviche" && product.category !== "Caldosa");
+    return products.filter((product) => !GUIDED_CATEGORIES.some((guided) => guided !== "Otros" && product.category === guided));
+  }
+  if (category === "Todo a 1000") {
+    return products.filter((product) => product.category === category);
   }
 
   const categoryMatches = products.filter((product) => product.category === category);
@@ -905,7 +913,7 @@ function findGuidedProducts(products: Product[], category: GuidedCategory | null
 function guidedCategorySubtitle(category: GuidedCategory, products: Product[]) {
   const count =
     category === "Otros"
-      ? products.filter((product) => product.category !== "Ceviche" && product.category !== "Caldosa").length
+      ? products.filter((product) => !GUIDED_CATEGORIES.some((guided) => guided !== "Otros" && product.category === guided)).length
       : products.filter((product) => product.category === category).length;
 
   return `${count} en catálogo`;
@@ -941,6 +949,7 @@ function guidedCategoryIcon(category: GuidedCategory) {
 function guidedCategoryTone(category: GuidedCategory) {
   if (category === "Ceviche") return "sky" as const;
   if (category === "Caldosa") return "emerald" as const;
+  if (category === "Todo a 1000") return "rose" as const;
   return "amber" as const;
 }
 
@@ -952,7 +961,7 @@ function guidedSubcategoryTone(subcategory: string) {
 }
 
 function getAvailableProductSubcategories(products: Product[], category: GuidedCategory | null) {
-  if (!category || category === "Otros") return [];
+  if (!category || DIRECT_PRODUCT_CATEGORIES.has(category)) return [];
 
   const values = products
     .filter((product) => product.category === category)
@@ -963,7 +972,7 @@ function getAvailableProductSubcategories(products: Product[], category: GuidedC
 }
 
 function getAvailableSizes(products: Product[], category: GuidedCategory | null, subcategory: string) {
-  if (!category || category === "Otros") return [];
+  if (!category || DIRECT_PRODUCT_CATEGORIES.has(category)) return [];
 
   const sizes = products
     .filter((product) => product.category === category && (!subcategory || productHasSubcategory(product, subcategory)))

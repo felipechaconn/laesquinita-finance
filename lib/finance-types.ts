@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 
-export const INCOME_CATEGORIES = ["Ceviche", "Caldosa", "Refrescos", "Otros"] as const;
+export const INCOME_CATEGORIES = ["Ceviche", "Caldosa", "Todo a 1000", "Refrescos", "Otros"] as const;
 export const EXPENSE_CATEGORIES = [
   "Pescado",
   "Mariscos",
